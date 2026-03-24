@@ -167,54 +167,12 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.post("/api/messages", async (req, res) => {
-  const requestId = req.header("x-request-id") || crypto.randomUUID();
-  const validationErrors = validateIncomingMessage(req.body);
-
-  if (validationErrors.length > 0) {
-    return res.status(400).json({
-      requestId,
-      error: "ValidationError",
-      details: validationErrors,
-    });
-  }
-
-  try {
-    const genesysResponse = await sendInboundToGenesys(inbound);
-
-    return res.status(202).json({
-      requestId,
-      status: "accepted",
-      genesysRequest: {
-        integrationId: config.genesys.integrationId,
-        messageId: inbound.messageId,
-      },
-      genesysResponse,
-    });
-  } catch (error) {
-    logError(
-      requestId,
-      "Failed to send inbound message to Genesys Cloud.",
-      error,
-    );
-
-    if (error instanceof HttpIntegrationError) {
-      return res.status(502).json({
-        requestId,
-        error: "GenesysApiError",
-        statusCode: error.status,
-        details: error.body,
-      });
-    }
-
-    return res.status(500).json({
-      requestId,
-      error: "InternalServerError",
-    });
-  }
-});
-
 app.post("/webhooks/sinch", async (req, res) => {
+  console.log(
+    "Received from Sinch at /webhooks/sinch with body:",
+    JSON.stringify(req.body, null, 4),
+  );
+
   const requestId = req.header("x-request-id") || crypto.randomUUID();
 
   const signatureResult = verifySinchSignature({
@@ -265,39 +223,6 @@ app.post("/webhooks/sinch", async (req, res) => {
       });
 
       await sendInboundToGenesys(callback);
-
-      return res.status(200).json({
-        requestId,
-        status: "accepted",
-      });
-    }
-
-    if (callback.kind === "message_delivery") {
-      const correlatedGenesysMessageId = normalizeGenesysMessageId(
-        callback.genesysMessageId,
-      );
-
-      if (!correlatedGenesysMessageId) {
-        return res.status(200).json({
-          requestId,
-          status: "ignored_no_correlation",
-        });
-      }
-
-      const genesysStatus = mapSinchDeliveryStatusToGenesys(callback.status);
-
-      const receiptPayload = buildGenesysReceiptPayload({
-        messageId: correlatedGenesysMessageId,
-        status: genesysStatus,
-        timestamp: callback.timestamp,
-        metadata: {
-          ...callback.metadata,
-          originalSinchStatus: callback.status,
-          sinchMessageId: callback.sinchMessageId || null,
-        },
-      });
-
-      await genesysClient.sendInboundReceipt(receiptPayload);
 
       return res.status(200).json({
         requestId,
