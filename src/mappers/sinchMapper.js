@@ -45,33 +45,20 @@ function mapQuickReplyChoice(choice, index) {
 }
 
 function extractQuickReplies(payload) {
-  /* const direct = firstArray(
-    payload?.quickReplies,
-    payload?.quick_replies,
-    payload?.choices,
-    payload?.buttons,
-    payload?.actions,
-    payload?.template?.buttons,
-    payload?.template?.quickReplies
-  );
-
-  if (direct.length > 0) {
-    return direct;
-  } */
+  /* structure examples to consider:
+  {
+    "text_message": {
+    "text": "Confirm"
+    }
+  }*/
 
   if (Array.isArray(payload?.content)) {
     const nested = [];
     for (const item of payload.content) {
       if (item.quickReply && item.quickReply.text) {
         nested.push(item.quickReply);
-        //nested.push({ text_message: { text: item.quickReply.text } });
+        // nested.push({ text_message: { text: item.quickReply.text } });
       }
-
-      /*{
-          "text_message": {
-            "text": "Confirm"
-          }
-        }
 
       /*  const nested = firstArray(
         item?.quickReply,
@@ -81,9 +68,14 @@ function extractQuickReplies(payload) {
         item?.buttons,
         item?.actions,
       ); */
-      if (nested.length > 0) {
-        return nested;
-      }
+    }
+
+    console.log(
+      "Extracted quick replies from nested content:",
+      JSON.stringify(nested),
+    );
+    if (nested.length > 0) {
+      return nested;
     }
   }
 
