@@ -12,17 +12,18 @@ export class SinchClient {
 
   async sendMessage(messagePayload) {
     console.log(
-      "Sending message with payload:",
+      "TO SINCH  => Sending message with payload:",
       JSON.stringify(messagePayload),
     );
 
-    return this.request(
+    return;
+    /* return this.request(
       `/v1/projects/${encodeURIComponent(this.config.projectId)}/messages:send`,
       {
         method: "POST",
         body: messagePayload,
       },
-    );
+    ); */
   }
 
   async request(path, { method = "GET", body } = {}) {
@@ -36,7 +37,10 @@ export class SinchClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    console.log("Response body:", JSON.stringify(await response.text()));
+    console.log(
+      "TO SINCH  => Response body:",
+      JSON.stringify(await response.text()),
+    );
 
     const responseBody = await this.readResponseBody(response);
     if (!response.ok) {
@@ -92,7 +96,10 @@ export class SinchClient {
   }
 
   async readResponseBody(response) {
-    console.log("Response status:", JSON.stringify(response.status));
+    console.log(
+      "SinchCient : Response status:",
+      JSON.stringify(response.status),
+    );
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
       return response.json();

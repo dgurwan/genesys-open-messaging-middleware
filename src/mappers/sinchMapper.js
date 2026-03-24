@@ -82,84 +82,6 @@ function extractQuickReplies(payload) {
   return [];
 }
 
-function extractCards(payload) {
-  const cards = firstArray(
-    payload?.cards,
-    payload?.carousel,
-    payload?.template?.cards,
-    payload?.content?.filter?.(
-      (item) =>
-        item?.title || item?.description || item?.mediaUrl || item?.imageUrl,
-    ) || [],
-  );
-
-  return cards
-    .map((card) => ({
-      title: asNonEmptyString(card?.title) || "",
-      description:
-        asNonEmptyString(card?.description) ||
-        asNonEmptyString(card?.subtitle) ||
-        "",
-      mediaUrl:
-        asNonEmptyString(card?.mediaUrl) ||
-        asNonEmptyString(card?.imageUrl) ||
-        asNonEmptyString(card?.image?.url),
-      quickReplies: firstArray(
-        card?.quickReplies,
-        card?.buttons,
-        card?.choices,
-      ),
-    }))
-    .filter((card) => card.title || card.description || card.mediaUrl);
-}
-
-function looksLikeMediaUrl(url) {
-  return /(\.jpg|\.jpeg|\.png|\.gif|\.webp|\.pdf|\.mp4|\.mov|\.mp3|\.wav|\.ogg)(\?|#|$)/i.test(
-    String(url || ""),
-  );
-}
-
-function extractAttachments(payload) {
-  const attachments = [];
-
-  const arrays = [
-    payload?.content,
-    payload?.attachments,
-    payload?.attachment ? [payload.attachment] : [],
-  ];
-
-  for (const array of arrays) {
-    if (!Array.isArray(array)) {
-      continue;
-    }
-
-    for (const item of array) {
-      const attachment = item?.attachment || item;
-      const url =
-        asNonEmptyString(attachment?.url) ||
-        asNonEmptyString(attachment?.mediaUrl) ||
-        asNonEmptyString(item?.url);
-      const declaredAttachment =
-        Boolean(item?.attachment) ||
-        String(item?.contentType || "").toLowerCase() === "attachment";
-      if (!url || (!declaredAttachment && !looksLikeMediaUrl(url))) {
-        continue;
-      }
-
-      attachments.push({
-        url,
-        contentType:
-          asNonEmptyString(attachment?.contentType) ||
-          asNonEmptyString(item?.contentType) ||
-          undefined,
-        filename: asNonEmptyString(attachment?.filename) || undefined,
-      });
-    }
-  }
-
-  return attachments;
-}
-
 export function parseGenesysOutboundMessage(payload) {
   const id =
     asNonEmptyString(payload?.id) ||
@@ -189,13 +111,6 @@ export function parseGenesysOutboundMessage(payload) {
 
   console.log("Extracted quick replies:", JSON.stringify(quickReplies));
 
-  const cards = extractCards(payload).map((card) => ({
-    title: card.title,
-    description: card.description,
-    media_message: card.mediaUrl ? { url: card.mediaUrl } : undefined,
-    choices: card.quickReplies.map(mapQuickReplyChoice),
-  }));
-  const attachments = extractAttachments(payload);
   const time =
     asNonEmptyString(payload?.channel?.time) ||
     asNonEmptyString(payload?.time) ||
@@ -207,8 +122,6 @@ export function parseGenesysOutboundMessage(payload) {
     agentId,
     text,
     quickReplies,
-    cards,
-    attachments,
     timestamp: time,
     raw: payload,
   };
