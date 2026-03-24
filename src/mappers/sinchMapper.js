@@ -71,7 +71,7 @@ function extractQuickReplies(payload) {
     }
 
     console.log(
-      "Extracted quick replies from nested content:",
+      "extractQuickReplies : Extracted quick replies from nested content:",
       JSON.stringify(nested),
     );
     if (nested.length > 0) {
@@ -109,12 +109,15 @@ export function parseGenesysOutboundMessage(payload) {
 
   const quickReplies = extractQuickReplies(payload).map(mapQuickReplyChoice);
 
-  console.log("Extracted quick replies:", JSON.stringify(quickReplies));
-
   const time =
     asNonEmptyString(payload?.channel?.time) ||
     asNonEmptyString(payload?.time) ||
     new Date().toISOString();
+
+  console.log(
+    "parseGenesysOutboundMessage : Parsed Genesys outbound message:",
+    JSON.stringify({ id, customerId, agentId, text, quickReplies, time }),
+  );
 
   return {
     id,
