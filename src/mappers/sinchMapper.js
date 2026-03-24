@@ -194,6 +194,9 @@ export function parseGenesysOutboundMessage(payload) {
       : null);
 
   const quickReplies = extractQuickReplies(payload).map(mapQuickReplyChoice);
+
+  console.log("Extracted quick replies:", JSON.stringify(quickReplies));
+
   const cards = extractCards(payload).map((card) => ({
     title: card.title,
     description: card.description,
