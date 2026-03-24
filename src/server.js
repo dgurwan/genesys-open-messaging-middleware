@@ -84,7 +84,7 @@ async function sendInboundToGenesys(inbound) {
   });
 
   console.log(
-    "Primary Genesys payload",
+    "Push to Genesys Cloud with payload:",
     JSON.stringify(primaryPayload, null, 2),
   );
 
@@ -115,6 +115,50 @@ async function sendInboundToGenesys(inbound) {
 
     return genesysClient.sendInboundMessage(fallbackPayload);
   }
+}
+
+function buildSinchDedupeKey({ callback, fallbackNonce }) {
+  if (callback.kind === "message_delivery") {
+    return [
+      "sinch",
+      "message_delivery",
+      callback.sinchMessageId || callback.messageId || "unknown",
+      callback.status || "unknown",
+      callback.timestamp || "no-timestamp",
+    ].join(":");
+  }
+
+  return [
+    "sinch",
+    callback.kind || "unknown",
+    callback.messageId ||
+      callback.sinchMessageId ||
+      fallbackNonce ||
+      crypto.randomUUID(),
+  ].join(":");
+}
+
+function normalizeGenesysMessageId(value) {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+
+  return value.replace(/:(text|media)$/i, "");
+}
+
+function mapSinchDeliveryStatusToGenesys(status) {
+  if (!status) {
+    return "Delivered";
+  }
+
+  const normalized = String(status).toUpperCase();
+
+  if (normalized === "FAILED") {
+    return "Failed";
+  }
+
+  // READ, DELIVERED, SENT, etc. -> Delivered côté Genesys
+  return "Delivered";
 }
 
 app.get("/health", (_req, res) => {
@@ -214,6 +258,7 @@ app.post("/api/messages", async (req, res) => {
 
 app.post("/webhooks/sinch", async (req, res) => {
   const requestId = req.header("x-request-id") || crypto.randomUUID();
+
   const signatureResult = verifySinchSignature({
     rawBody: req.rawBody || "",
     secret: config.sinch.webhookSecret,
@@ -231,14 +276,29 @@ app.post("/webhooks/sinch", async (req, res) => {
     });
   }
 
-  const callback = parseSinchCallback(req.body);
-  const dedupeKey = `sinch:${callback.kind}:${callback.messageId || callback.sinchMessageId || req.header("x-sinch-webhook-signature-nonce")}`;
-
-  if (store.hasProcessed(dedupeKey)) {
-    return res.status(200).json({ requestId, status: "duplicate_ignored" });
+  let callback;
+  try {
+    callback = parseSinchCallback(req.body);
+  } catch (error) {
+    logError(requestId, "Failed to parse Sinch callback.", error);
+    return res.status(400).json({
+      requestId,
+      error: "BadRequest",
+      details: "Invalid Sinch callback payload.",
+    });
   }
 
-  store.rememberProcessed(dedupeKey);
+  const dedupeKey = buildSinchDedupeKey({
+    callback,
+    fallbackNonce: req.header("x-sinch-webhook-signature-nonce"),
+  });
+
+  if (store.hasProcessed(dedupeKey)) {
+    return res.status(200).json({
+      requestId,
+      status: "duplicate_ignored",
+    });
+  }
 
   try {
     if (callback.kind === "message_inbound") {
@@ -250,14 +310,6 @@ app.post("/webhooks/sinch", async (req, res) => {
         });
       }
 
-      store.upsertConversation(callback.externalUserId, {
-        channel: "RCS",
-        sinchIdentity: callback.externalUserId,
-        sinchConversationId: callback.metadata.sinchConversationId,
-        sinchContactId: callback.metadata.sinchContactId,
-        latestInboundAt: callback.timestamp,
-      });
-
       console.log("Received inbound message from Sinch:", {
         externalUserId: callback.externalUserId,
         messageId: callback.messageId,
@@ -267,32 +319,69 @@ app.post("/webhooks/sinch", async (req, res) => {
       });
 
       await sendInboundToGenesys(callback);
+
+      store.upsertConversation(callback.externalUserId, {
+        channel: "RCS",
+        sinchIdentity: callback.externalUserId,
+        sinchConversationId: callback.metadata?.sinchConversationId || null,
+        sinchContactId: callback.metadata?.sinchContactId || null,
+        latestInboundAt: callback.timestamp,
+      });
+
       store.addMessage(
         callback.externalUserId,
         serializeMessage("inbound", "SINCH_RCS", callback),
       );
 
-      return res.status(200).json({ requestId, status: "accepted" });
+      store.rememberProcessed(dedupeKey);
+
+      return res.status(200).json({
+        requestId,
+        status: "accepted",
+      });
     }
 
     if (callback.kind === "message_delivery") {
-      const genesysMessageId = callback.genesysMessageId
-        ? callback.genesysMessageId.replace(/:(text|media)$/, "")
-        : null;
+      const correlatedGenesysMessageId = normalizeGenesysMessageId(
+        callback.genesysMessageId,
+      );
 
-      if (!genesysMessageId) {
-        return res
-          .status(200)
-          .json({ requestId, status: "ignored_no_correlation" });
+      if (!correlatedGenesysMessageId) {
+        if (callback.externalUserId) {
+          store.addMessage(callback.externalUserId, {
+            id: callback.sinchMessageId || crypto.randomUUID(),
+            direction: "event",
+            source: "SINCH_DELIVERY",
+            timestamp: callback.timestamp,
+            text: null,
+            mediaUrl: null,
+            metadata: {
+              originalSinchStatus: callback.status,
+              ...callback.metadata,
+            },
+            raw: callback.raw,
+          });
+        }
+
+        store.rememberProcessed(dedupeKey);
+
+        return res.status(200).json({
+          requestId,
+          status: "ignored_no_correlation",
+        });
       }
 
-      const genesysStatus =
-        callback.status === "FAILED" ? "Failed" : "Delivered";
+      const genesysStatus = mapSinchDeliveryStatusToGenesys(callback.status);
+
       const receiptPayload = buildGenesysReceiptPayload({
-        messageId: genesysMessageId,
+        messageId: correlatedGenesysMessageId,
         status: genesysStatus,
         timestamp: callback.timestamp,
-        metadata: callback.metadata,
+        metadata: {
+          ...callback.metadata,
+          originalSinchStatus: callback.status,
+          sinchMessageId: callback.sinchMessageId || null,
+        },
       });
 
       await genesysClient.sendInboundReceipt(receiptPayload);
@@ -306,22 +395,35 @@ app.post("/webhooks/sinch", async (req, res) => {
           text: null,
           mediaUrl: null,
           metadata: {
-            status: callback.status,
-            genesysMessageId,
+            status: genesysStatus,
+            originalSinchStatus: callback.status,
+            genesysMessageId: correlatedGenesysMessageId,
             ...callback.metadata,
           },
           raw: callback.raw,
         });
       }
 
-      return res.status(200).json({ requestId, status: "accepted" });
+      store.rememberProcessed(dedupeKey);
+
+      return res.status(200).json({
+        requestId,
+        status: "accepted",
+      });
     }
 
-    return res.status(200).json({ requestId, status: "ignored" });
+    store.rememberProcessed(dedupeKey);
+
+    return res.status(200).json({
+      requestId,
+      status: "ignored",
+    });
   } catch (error) {
     logError(requestId, "Failed to process Sinch webhook.", error, {
       callbackKind: callback.kind,
+      dedupeKey,
     });
+
     if (error instanceof HttpIntegrationError) {
       return res.status(502).json({
         requestId,
@@ -331,7 +433,10 @@ app.post("/webhooks/sinch", async (req, res) => {
       });
     }
 
-    return res.status(500).json({ requestId, error: "InternalServerError" });
+    return res.status(500).json({
+      requestId,
+      error: "InternalServerError",
+    });
   }
 });
 
