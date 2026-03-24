@@ -83,7 +83,7 @@ function extractQuickReplies(payload) {
 }
 
 export function parseGenesysOutboundMessage(payload) {
-  if (payloaad && payload.type == "receipt") {
+  if (payload && payload.type == "receipt") {
     return;
   }
 
