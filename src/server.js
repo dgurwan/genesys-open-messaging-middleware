@@ -371,9 +371,7 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
       dispatchedMessages: results,
     });
   } catch (error) {
-    logError(requestId, "Failed to process Genesys outbound webhook.", error, {
-      customerId: outbound.customerId,
-    });
+    logError(requestId, "Failed to process Genesys outbound webhook.", error);
     if (error instanceof HttpIntegrationError) {
       return res.status(502).json({
         requestId,
