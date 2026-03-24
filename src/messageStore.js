@@ -1,90 +1,94 @@
 export class MessageStore {
-  #config;
-  #processed = new Map();
-  #conversationByExternalUser = new Map();
-  #messagesByExternalUser = new Map();
-  #sseClientsByExternalUser = new Map();
+  config;
+  processed = new Map();
+  conversationByExternalUser = new Map();
+  messagesByExternalUser = new Map();
+  sseClientsByExternalUser = new Map();
 
   constructor(config) {
-    this.#config = config;
+    this.config = config;
   }
 
   rememberProcessed(key, ttlMs = 24 * 60 * 60 * 1000) {
     const expiresAt = Date.now() + ttlMs;
-    this.#processed.set(key, expiresAt);
-    this.#pruneProcessed();
+    this.processed.set(key, expiresAt);
+    this.pruneProcessed();
   }
 
   hasProcessed(key) {
-    this.#pruneProcessed();
-    const expiresAt = this.#processed.get(key);
+    this.pruneProcessed();
+    const expiresAt = this.processed.get(key);
     return Boolean(expiresAt && expiresAt > Date.now());
   }
 
   upsertConversation(externalUserId, details = {}) {
     const now = new Date().toISOString();
-    const current = this.#conversationByExternalUser.get(externalUserId) || {
+    const current = this.conversationByExternalUser.get(externalUserId) || {
       externalUserId,
-      createdAt: now
+      createdAt: now,
     };
 
     const merged = {
       ...current,
       ...details,
       externalUserId,
-      updatedAt: now
+      updatedAt: now,
     };
 
-    this.#conversationByExternalUser.set(externalUserId, merged);
+    this.conversationByExternalUser.set(externalUserId, merged);
     return merged;
   }
 
   getConversation(externalUserId) {
-    return this.#conversationByExternalUser.get(externalUserId) || null;
+    return this.conversationByExternalUser.get(externalUserId) || null;
   }
 
   listConversations() {
-    return Array.from(this.#conversationByExternalUser.values())
-      .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+    return Array.from(this.conversationByExternalUser.values()).sort((a, b) =>
+      String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")),
+    );
   }
 
   addMessage(externalUserId, message) {
-    const current = this.#messagesByExternalUser.get(externalUserId) || [];
+    const current = this.messagesByExternalUser.get(externalUserId) || [];
     current.push(message);
 
-    if (current.length > this.#config.maxMessagesPerConversation) {
-      current.splice(0, current.length - this.#config.maxMessagesPerConversation);
+    if (current.length > this.config.maxMessagesPerConversation) {
+      current.splice(
+        0,
+        current.length - this.config.maxMessagesPerConversation,
+      );
     }
 
-    this.#messagesByExternalUser.set(externalUserId, current);
+    this.messagesByExternalUser.set(externalUserId, current);
     this.publishEvent(externalUserId, message);
     return message;
   }
 
   getMessages(externalUserId) {
-    return this.#messagesByExternalUser.get(externalUserId) || [];
+    return this.messagesByExternalUser.get(externalUserId) || [];
   }
 
   createSseClient(externalUserId, res) {
-    const set = this.#sseClientsByExternalUser.get(externalUserId) || new Set();
+    const set = this.sseClientsByExternalUser.get(externalUserId) || new Set();
     set.add(res);
-    this.#sseClientsByExternalUser.set(externalUserId, set);
+    this.sseClientsByExternalUser.set(externalUserId, set);
   }
 
   removeSseClient(externalUserId, res) {
-    const set = this.#sseClientsByExternalUser.get(externalUserId);
+    const set = this.sseClientsByExternalUser.get(externalUserId);
     if (!set) {
       return;
     }
 
     set.delete(res);
     if (set.size === 0) {
-      this.#sseClientsByExternalUser.delete(externalUserId);
+      this.sseClientsByExternalUser.delete(externalUserId);
     }
   }
 
   publishEvent(externalUserId, payload) {
-    const set = this.#sseClientsByExternalUser.get(externalUserId);
+    const set = this.sseClientsByExternalUser.get(externalUserId);
     if (!set || set.size === 0) {
       return;
     }
@@ -99,11 +103,11 @@ export class MessageStore {
     }
   }
 
-  #pruneProcessed() {
+  pruneProcessed() {
     const now = Date.now();
-    for (const [key, expiresAt] of this.#processed.entries()) {
+    for (const [key, expiresAt] of this.processed.entries()) {
       if (expiresAt <= now) {
-        this.#processed.delete(key);
+        this.processed.delete(key);
       }
     }
   }

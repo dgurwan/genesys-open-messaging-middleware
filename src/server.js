@@ -1,14 +1,24 @@
-import crypto from 'node:crypto';
-import express from 'express';
-import { loadConfig } from './config.js';
-import { HttpIntegrationError } from './errors.js';
-import { MessageStore } from './messageStore.js';
-import { verifyGenesysSignature, verifySinchSignature } from './signatures.js';
-import { buildManualInboundMessage, validateIncomingMessage } from './validation.js';
-import { GenesysClient } from './clients/genesysClient.js';
-import { SinchClient } from './clients/sinchClient.js';
-import { buildGenesysInboundPayload, buildGenesysReceiptPayload } from './mappers/genesysMapper.js';
-import { buildSinchRequestsFromGenesysMessage, parseGenesysOutboundMessage, parseSinchCallback } from './mappers/sinchMapper.js';
+import crypto from "node:crypto";
+import express from "express";
+import { loadConfig } from "./config.js";
+import { HttpIntegrationError } from "./errors.js";
+import { MessageStore } from "./messageStore.js";
+import { verifyGenesysSignature, verifySinchSignature } from "./signatures.js";
+import {
+  buildManualInboundMessage,
+  validateIncomingMessage,
+} from "./validation.js";
+import { GenesysClient } from "./clients/genesysClient.js";
+import { SinchClient } from "./clients/sinchClient.js";
+import {
+  buildGenesysInboundPayload,
+  buildGenesysReceiptPayload,
+} from "./mappers/genesysMapper.js";
+import {
+  buildSinchRequestsFromGenesysMessage,
+  parseGenesysOutboundMessage,
+  parseSinchCallback,
+} from "./mappers/sinchMapper.js";
 
 const config = loadConfig();
 const genesysClient = new GenesysClient(config.genesys);
@@ -16,32 +26,36 @@ const sinchClient = new SinchClient(config.sinch);
 const store = new MessageStore(config.storage);
 
 const app = express();
-app.disable('x-powered-by');
-app.use(express.json({
-  limit: '2mb',
-  verify: (req, _res, buf) => {
-    req.rawBody = buf.toString('utf8');
-  }
-}));
+app.disable("x-powered-by");
+app.use(
+  express.json({
+    limit: "2mb",
+    verify: (req, _res, buf) => {
+      req.rawBody = buf.toString("utf8");
+    },
+  }),
+);
 
 if (config.security.trustProxy) {
-  app.set('trust proxy', true);
+  app.set("trust proxy", true);
 }
 
 function logInfo(requestId, message, data = {}) {
-  console.log(JSON.stringify({ level: 'info', requestId, message, ...data }));
+  console.log(JSON.stringify({ level: "info", requestId, message, ...data }));
 }
 
 function logError(requestId, message, error, extra = {}) {
-  console.error(JSON.stringify({
-    level: 'error',
-    requestId,
-    message,
-    error: error?.message,
-    status: error?.status,
-    details: error?.body,
-    ...extra
-  }));
+  console.error(
+    JSON.stringify({
+      level: "error",
+      requestId,
+      message,
+      error: error?.message,
+      status: error?.status,
+      details: error?.body,
+      ...extra,
+    }),
+  );
 }
 
 function serializeMessage(direction, source, payload) {
@@ -53,7 +67,7 @@ function serializeMessage(direction, source, payload) {
     text: payload.text || null,
     mediaUrl: payload.mediaUrl || null,
     metadata: payload.metadata || {},
-    raw: payload.raw || undefined
+    raw: payload.raw || undefined,
   };
 }
 
@@ -66,13 +80,22 @@ async function sendInboundToGenesys(inbound) {
     text: inbound.text,
     metadata: inbound.metadata,
     mediaUrl: inbound.mediaUrl,
-    includeAttachmentContent: config.genesys.includeAttachmentContent
+    includeAttachmentContent: config.genesys.includeAttachmentContent,
   });
+
+  console.log(
+    "Primary Genesys payload",
+    JSON.stringify(primaryPayload, null, 2),
+  );
 
   try {
     return await genesysClient.sendInboundMessage(primaryPayload);
   } catch (error) {
-    if (!(error instanceof HttpIntegrationError) || !inbound.mediaUrl || !config.genesys.includeAttachmentContent) {
+    if (
+      !(error instanceof HttpIntegrationError) ||
+      !inbound.mediaUrl ||
+      !config.genesys.includeAttachmentContent
+    ) {
       throw error;
     }
 
@@ -84,171 +107,184 @@ async function sendInboundToGenesys(inbound) {
       text: inbound.text || `[media] ${inbound.mediaUrl}`,
       metadata: {
         ...inbound.metadata,
-        genesysAttachmentFallback: true
+        genesysAttachmentFallback: true,
       },
       mediaUrl: undefined,
-      includeAttachmentContent: false
+      includeAttachmentContent: false,
     });
 
     return genesysClient.sendInboundMessage(fallbackPayload);
   }
 }
 
-app.get('/health', (_req, res) => {
+app.get("/health", (_req, res) => {
   res.json({
-    status: 'ok',
+    status: "ok",
     service: config.serviceName,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
-app.get('/api/conversations', (_req, res) => {
+app.get("/api/conversations", (_req, res) => {
   res.json({ conversations: store.listConversations() });
 });
 
-app.get('/api/conversations/:externalUserId/messages', (req, res) => {
+app.get("/api/conversations/:externalUserId/messages", (req, res) => {
   res.json({
     externalUserId: req.params.externalUserId,
-    messages: store.getMessages(req.params.externalUserId)
+    messages: store.getMessages(req.params.externalUserId),
   });
 });
 
-app.get('/api/conversations/:externalUserId/events', (req, res) => {
+app.get("/api/conversations/:externalUserId/events", (req, res) => {
   const { externalUserId } = req.params;
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
   res.flushHeaders?.();
   res.write('event: connected\ndata: {"status":"ok"}\n\n');
 
   store.createSseClient(externalUserId, res);
 
-  req.on('close', () => {
+  req.on("close", () => {
     store.removeSseClient(externalUserId, res);
   });
 });
 
-app.post('/api/messages', async (req, res) => {
-  const requestId = req.header('x-request-id') || crypto.randomUUID();
+app.post("/api/messages", async (req, res) => {
+  const requestId = req.header("x-request-id") || crypto.randomUUID();
   const validationErrors = validateIncomingMessage(req.body);
 
   if (validationErrors.length > 0) {
     return res.status(400).json({
       requestId,
-      error: 'ValidationError',
-      details: validationErrors
+      error: "ValidationError",
+      details: validationErrors,
     });
   }
 
   const inbound = buildManualInboundMessage(req.body);
   store.upsertConversation(inbound.externalUserId, {
-    channel: req.body.channel || 'CUSTOM',
-    latestInboundAt: inbound.timestamp
+    channel: req.body.channel || "CUSTOM",
+    latestInboundAt: inbound.timestamp,
   });
 
   try {
     const genesysResponse = await sendInboundToGenesys(inbound);
-    store.addMessage(inbound.externalUserId, serializeMessage('inbound', 'CUSTOM_API', {
-      ...inbound,
-      raw: req.body
-    }));
+    store.addMessage(
+      inbound.externalUserId,
+      serializeMessage("inbound", "CUSTOM_API", {
+        ...inbound,
+        raw: req.body,
+      }),
+    );
 
     return res.status(202).json({
       requestId,
-      status: 'accepted',
+      status: "accepted",
       genesysRequest: {
         integrationId: config.genesys.integrationId,
-        messageId: inbound.messageId
+        messageId: inbound.messageId,
       },
-      genesysResponse
+      genesysResponse,
     });
   } catch (error) {
-    logError(requestId, 'Failed to send inbound message to Genesys Cloud.', error);
+    logError(
+      requestId,
+      "Failed to send inbound message to Genesys Cloud.",
+      error,
+    );
 
     if (error instanceof HttpIntegrationError) {
       return res.status(502).json({
         requestId,
-        error: 'GenesysApiError',
+        error: "GenesysApiError",
         statusCode: error.status,
-        details: error.body
+        details: error.body,
       });
     }
 
     return res.status(500).json({
       requestId,
-      error: 'InternalServerError'
+      error: "InternalServerError",
     });
   }
 });
 
-app.post('/webhooks/sinch', async (req, res) => {
-  const requestId = req.header('x-request-id') || crypto.randomUUID();
+app.post("/webhooks/sinch", async (req, res) => {
+  const requestId = req.header("x-request-id") || crypto.randomUUID();
   const signatureResult = verifySinchSignature({
-    rawBody: req.rawBody || '',
+    rawBody: req.rawBody || "",
     secret: config.sinch.webhookSecret,
-    signature: req.header('x-sinch-webhook-signature'),
-    nonce: req.header('x-sinch-webhook-signature-nonce'),
-    timestamp: req.header('x-sinch-webhook-signature-timestamp'),
-    maxSkewSeconds: config.sinch.signatureMaxSkewSeconds
+    signature: req.header("x-sinch-webhook-signature"),
+    nonce: req.header("x-sinch-webhook-signature-nonce"),
+    timestamp: req.header("x-sinch-webhook-signature-timestamp"),
+    maxSkewSeconds: config.sinch.signatureMaxSkewSeconds,
   });
 
   if (!signatureResult.ok) {
     return res.status(401).json({
       requestId,
-      error: 'Unauthorized',
-      details: signatureResult.reason
+      error: "Unauthorized",
+      details: signatureResult.reason,
     });
   }
 
   const callback = parseSinchCallback(req.body);
-  const dedupeKey = `sinch:${callback.kind}:${callback.messageId || callback.sinchMessageId || req.header('x-sinch-webhook-signature-nonce')}`;
+  const dedupeKey = `sinch:${callback.kind}:${callback.messageId || callback.sinchMessageId || req.header("x-sinch-webhook-signature-nonce")}`;
 
   if (store.hasProcessed(dedupeKey)) {
-    return res.status(200).json({ requestId, status: 'duplicate_ignored' });
+    return res.status(200).json({ requestId, status: "duplicate_ignored" });
   }
 
   store.rememberProcessed(dedupeKey);
 
   try {
-    if (callback.kind === 'message_inbound') {
+    if (callback.kind === "message_inbound") {
       if (!callback.externalUserId) {
         return res.status(400).json({
           requestId,
-          error: 'BadRequest',
-          details: 'Sinch callback does not contain an RCS identity.'
+          error: "BadRequest",
+          details: "Sinch callback does not contain an RCS identity.",
         });
       }
 
       store.upsertConversation(callback.externalUserId, {
-        channel: 'RCS',
+        channel: "RCS",
         sinchIdentity: callback.externalUserId,
         sinchConversationId: callback.metadata.sinchConversationId,
         sinchContactId: callback.metadata.sinchContactId,
-        latestInboundAt: callback.timestamp
+        latestInboundAt: callback.timestamp,
       });
 
       await sendInboundToGenesys(callback);
-      store.addMessage(callback.externalUserId, serializeMessage('inbound', 'SINCH_RCS', callback));
+      store.addMessage(
+        callback.externalUserId,
+        serializeMessage("inbound", "SINCH_RCS", callback),
+      );
 
-      return res.status(200).json({ requestId, status: 'accepted' });
+      return res.status(200).json({ requestId, status: "accepted" });
     }
 
-    if (callback.kind === 'message_delivery') {
+    if (callback.kind === "message_delivery") {
       const genesysMessageId = callback.genesysMessageId
-        ? callback.genesysMessageId.replace(/:(text|media)$/, '')
+        ? callback.genesysMessageId.replace(/:(text|media)$/, "")
         : null;
 
       if (!genesysMessageId) {
-        return res.status(200).json({ requestId, status: 'ignored_no_correlation' });
+        return res
+          .status(200)
+          .json({ requestId, status: "ignored_no_correlation" });
       }
 
-      const genesysStatus = callback.status === 'FAILED' ? 'Failed' : 'Delivered';
+      const genesysStatus =
+        callback.status === "FAILED" ? "Failed" : "Delivered";
       const receiptPayload = buildGenesysReceiptPayload({
         messageId: genesysMessageId,
         status: genesysStatus,
         timestamp: callback.timestamp,
-        metadata: callback.metadata
+        metadata: callback.metadata,
       });
 
       await genesysClient.sendInboundReceipt(receiptPayload);
@@ -256,52 +292,54 @@ app.post('/webhooks/sinch', async (req, res) => {
       if (callback.externalUserId) {
         store.addMessage(callback.externalUserId, {
           id: callback.sinchMessageId || crypto.randomUUID(),
-          direction: 'event',
-          source: 'SINCH_DELIVERY',
+          direction: "event",
+          source: "SINCH_DELIVERY",
           timestamp: callback.timestamp,
           text: null,
           mediaUrl: null,
           metadata: {
             status: callback.status,
             genesysMessageId,
-            ...callback.metadata
+            ...callback.metadata,
           },
-          raw: callback.raw
+          raw: callback.raw,
         });
       }
 
-      return res.status(200).json({ requestId, status: 'accepted' });
+      return res.status(200).json({ requestId, status: "accepted" });
     }
 
-    return res.status(200).json({ requestId, status: 'ignored' });
+    return res.status(200).json({ requestId, status: "ignored" });
   } catch (error) {
-    logError(requestId, 'Failed to process Sinch webhook.', error, { callbackKind: callback.kind });
+    logError(requestId, "Failed to process Sinch webhook.", error, {
+      callbackKind: callback.kind,
+    });
     if (error instanceof HttpIntegrationError) {
       return res.status(502).json({
         requestId,
-        error: 'IntegrationError',
+        error: "IntegrationError",
         details: error.body,
-        statusCode: error.status
+        statusCode: error.status,
       });
     }
 
-    return res.status(500).json({ requestId, error: 'InternalServerError' });
+    return res.status(500).json({ requestId, error: "InternalServerError" });
   }
 });
 
-app.post('/webhooks/genesys/outbound', async (req, res) => {
-  const requestId = req.header('x-request-id') || crypto.randomUUID();
+app.post("/webhooks/genesys/outbound", async (req, res) => {
+  const requestId = req.header("x-request-id") || crypto.randomUUID();
   const signatureValid = verifyGenesysSignature({
-    rawBody: req.rawBody || '',
-    headerValue: req.header('x-hub-signature-256'),
-    secret: config.genesys.outboundWebhookSecret
+    rawBody: req.rawBody || "",
+    headerValue: req.header("x-hub-signature-256"),
+    secret: config.genesys.outboundWebhookSecret,
   });
 
   if (!signatureValid) {
     return res.status(401).json({
       requestId,
-      error: 'Unauthorized',
-      details: 'Invalid Genesys webhook signature.'
+      error: "Unauthorized",
+      details: "Invalid Genesys webhook signature.",
     });
   }
 
@@ -309,7 +347,7 @@ app.post('/webhooks/genesys/outbound', async (req, res) => {
   const dedupeKey = `genesys:${outbound.id}:${outbound.timestamp}`;
 
   if (store.hasProcessed(dedupeKey)) {
-    return res.status(200).json({ requestId, status: 'duplicate_ignored' });
+    return res.status(200).json({ requestId, status: "duplicate_ignored" });
   }
 
   store.rememberProcessed(dedupeKey);
@@ -317,7 +355,7 @@ app.post('/webhooks/genesys/outbound', async (req, res) => {
   try {
     const requests = buildSinchRequestsFromGenesysMessage({
       appId: config.sinch.appId,
-      genesysMessage: outbound
+      genesysMessage: outbound,
     });
 
     const results = [];
@@ -327,59 +365,66 @@ app.post('/webhooks/genesys/outbound', async (req, res) => {
 
     if (outbound.customerId) {
       store.upsertConversation(outbound.customerId, {
-        channel: 'RCS',
+        channel: "RCS",
         sinchIdentity: outbound.customerId,
-        latestOutboundAt: outbound.timestamp
+        latestOutboundAt: outbound.timestamp,
       });
 
-      store.addMessage(outbound.customerId, serializeMessage('outbound', 'GENESYS_AGENT', {
-        id: outbound.id,
-        messageId: outbound.id,
-        timestamp: outbound.timestamp,
-        text: outbound.text,
-        mediaUrl: outbound.attachments[0]?.url,
-        metadata: {
-          agentId: outbound.agentId,
-          requestCount: requests.length
-        },
-        raw: req.body
-      }));
+      store.addMessage(
+        outbound.customerId,
+        serializeMessage("outbound", "GENESYS_AGENT", {
+          id: outbound.id,
+          messageId: outbound.id,
+          timestamp: outbound.timestamp,
+          text: outbound.text,
+          mediaUrl: outbound.attachments[0]?.url,
+          metadata: {
+            agentId: outbound.agentId,
+            requestCount: requests.length,
+          },
+          raw: req.body,
+        }),
+      );
     }
 
     return res.status(200).json({
       requestId,
-      status: 'accepted',
-      dispatchedMessages: results
+      status: "accepted",
+      dispatchedMessages: results,
     });
   } catch (error) {
-    logError(requestId, 'Failed to process Genesys outbound webhook.', error, { customerId: outbound.customerId });
+    logError(requestId, "Failed to process Genesys outbound webhook.", error, {
+      customerId: outbound.customerId,
+    });
     if (error instanceof HttpIntegrationError) {
       return res.status(502).json({
         requestId,
-        error: 'IntegrationError',
+        error: "IntegrationError",
         statusCode: error.status,
-        details: error.body
+        details: error.body,
       });
     }
 
-    return res.status(500).json({ requestId, error: 'InternalServerError' });
+    return res.status(500).json({ requestId, error: "InternalServerError" });
   }
 });
 
 app.use((err, req, res, _next) => {
-  const requestId = req.header('x-request-id') || crypto.randomUUID();
-  logError(requestId, 'Unhandled Express error.', err);
-  res.status(500).json({ requestId, error: 'InternalServerError' });
+  const requestId = req.header("x-request-id") || crypto.randomUUID();
+  logError(requestId, "Unhandled Express error.", err);
+  res.status(500).json({ requestId, error: "InternalServerError" });
 });
 
 function start() {
   app.listen(config.port, () => {
-    logInfo('startup', `${config.serviceName} listening`, { port: config.port });
+    logInfo("startup", `${config.serviceName} listening`, {
+      port: config.port,
+    });
   });
 }
 
-if (process.argv.includes('--check-config')) {
-  console.log('Configuration OK');
+if (process.argv.includes("--check-config")) {
+  console.log("Configuration OK");
 } else {
   start();
 }
