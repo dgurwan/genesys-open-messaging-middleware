@@ -448,6 +448,11 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
     secret: config.genesys.outboundWebhookSecret,
   });
 
+  console.log(
+    "Received Genesys outbound webhook with requestId:",
+    JSON.stringify(req),
+  );
+
   if (!signatureValid) {
     return res.status(401).json({
       requestId,
