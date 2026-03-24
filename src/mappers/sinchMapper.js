@@ -172,7 +172,7 @@ export function buildSinchRequestsFromGenesysMessage({
       message: {
         choice_message: {
           text_message: {
-            text: genesysMessage.text || "Please choose an option.",
+            text: genesysMessage.text || "Fais le bon choix ! 😉",
           },
           choices: genesysMessage.quickReplies.slice(0, 13),
         },
@@ -207,14 +207,6 @@ export function parseSinchCallback(payload) {
     if (contactMessage.text_message?.text) {
       inboundType = "text";
       text = contactMessage.text_message.text;
-    } else if (contactMessage.media_message?.url) {
-      inboundType = "media";
-      mediaUrl = contactMessage.media_message.url;
-      text = `[media] ${mediaUrl}`;
-    } else if (contactMessage.location_message?.coordinates) {
-      inboundType = "location";
-      const location = contactMessage.location_message;
-      text = `Location: ${location.coordinates.latitude}, ${location.coordinates.longitude}${location.title ? ` (${location.title})` : ""}`;
     } else if (contactMessage.choice_response_message?.postback_data) {
       inboundType = "quick_reply";
       text = contactMessage.choice_response_message.postback_data;
@@ -243,29 +235,6 @@ export function parseSinchCallback(payload) {
         sinchMessageMetadata: payload.message_metadata || undefined,
         sinchCorrelationId: payload.correlation_id || undefined,
         choiceMessageId: choiceMessageId || undefined,
-      },
-      raw: payload,
-    };
-  }
-
-  if (payload?.message_delivery_report) {
-    const report = payload.message_delivery_report;
-    return {
-      kind: "message_delivery",
-      status: asNonEmptyString(report.status),
-      genesysMessageId: asNonEmptyString(payload.correlation_id) || null,
-      sinchMessageId: asNonEmptyString(report.message_id),
-      externalUserId: asNonEmptyString(report.channel_identity?.identity),
-      timestamp:
-        asNonEmptyString(payload.event_time) ||
-        asNonEmptyString(payload.accepted_time) ||
-        new Date().toISOString(),
-      metadata: {
-        sinchConversationId:
-          asNonEmptyString(report.conversation_id) || undefined,
-        sinchContactId: asNonEmptyString(report.contact_id) || undefined,
-        failureCode: report.reason?.code || undefined,
-        failureDescription: report.reason?.description || undefined,
       },
       raw: payload,
     };

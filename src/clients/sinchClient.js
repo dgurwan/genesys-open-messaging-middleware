@@ -16,14 +16,14 @@ export class SinchClient {
       JSON.stringify(messagePayload),
     );
 
-    return;
-    /* return this.request(
+    //return;
+    return this.request(
       `/v1/projects/${encodeURIComponent(this.config.projectId)}/messages:send`,
       {
         method: "POST",
         body: messagePayload,
       },
-    ); */
+    );
   }
 
   async request(path, { method = "GET", body } = {}) {
