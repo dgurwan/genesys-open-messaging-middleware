@@ -165,38 +165,6 @@ export function buildSinchRequestsFromGenesysMessage({
   const correlationBase = genesysMessage.id || `genesys-${Date.now()}`;
   const requests = [];
 
-  if (genesysMessage.cards.length > 1) {
-    requests.push({
-      ...base,
-      correlation_id: correlationBase,
-      message: {
-        carousel_message: {
-          cards: genesysMessage.cards.slice(0, 10),
-        },
-      },
-    });
-    return requests;
-  }
-
-  if (genesysMessage.cards.length === 1) {
-    const [card] = genesysMessage.cards;
-    requests.push({
-      ...base,
-      correlation_id: correlationBase,
-      message: {
-        card_message: {
-          title: card.title,
-          description: card.description,
-          ...(card.media_message ? { media_message: card.media_message } : {}),
-          ...(card.choices?.length
-            ? { choices: card.choices.slice(0, 4) }
-            : {}),
-        },
-      },
-    });
-    return requests;
-  }
-
   if (genesysMessage.quickReplies.length > 0) {
     requests.push({
       ...base,
@@ -207,44 +175,6 @@ export function buildSinchRequestsFromGenesysMessage({
             text: genesysMessage.text || "Please choose an option.",
           },
           choices: genesysMessage.quickReplies.slice(0, 13),
-        },
-      },
-    });
-    return requests;
-  }
-
-  if (genesysMessage.attachments.length > 0 && !genesysMessage.text) {
-    const [attachment] = genesysMessage.attachments;
-    requests.push({
-      ...base,
-      correlation_id: correlationBase,
-      message: {
-        media_message: {
-          url: attachment.url,
-        },
-      },
-    });
-    return requests;
-  }
-
-  if (genesysMessage.attachments.length > 0 && genesysMessage.text) {
-    requests.push({
-      ...base,
-      correlation_id: `${correlationBase}:text`,
-      message: {
-        text_message: {
-          text: genesysMessage.text,
-        },
-      },
-    });
-
-    const [attachment] = genesysMessage.attachments;
-    requests.push({
-      ...base,
-      correlation_id: `${correlationBase}:media`,
-      message: {
-        media_message: {
-          url: attachment.url,
         },
       },
     });
