@@ -449,7 +449,7 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
   });
 
   console.log(
-    "Received Genesys outbound webhook with requestId:",
+    "Received from Genesys from /webhooks/genesys/outbound with body:",
     JSON.stringify(req.body, null, 4),
   );
 
