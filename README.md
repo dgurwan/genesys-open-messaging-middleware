@@ -214,7 +214,6 @@ SSE simple pour suivre les événements en temps réel.
     │   └── sinchMapper.js
     ├── config.js
     ├── errors.js
-    ├── messageStore.js
     ├── server.js
     ├── signatures.js
     └── validation.js

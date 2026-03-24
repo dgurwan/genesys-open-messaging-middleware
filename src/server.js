@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import express from "express";
 import { loadConfig } from "./config.js";
 import { HttpIntegrationError } from "./errors.js";
-import { MessageStore } from "./messageStore.js";
 import { verifyGenesysSignature, verifySinchSignature } from "./signatures.js";
 import {
   buildManualInboundMessage,
@@ -23,7 +22,6 @@ import {
 const config = loadConfig();
 const genesysClient = new GenesysClient(config.genesys);
 const sinchClient = new SinchClient(config.sinch);
-const store = new MessageStore(config.storage);
 
 const app = express();
 app.disable("x-powered-by");
@@ -84,7 +82,7 @@ async function sendInboundToGenesys(inbound) {
   });
 
   console.log(
-    "Push to Genesys Cloud with payload:",
+    "sendInboundToGenesys : Push to Genesys Cloud with payload:",
     JSON.stringify(primaryPayload, null, 2),
   );
 
@@ -169,33 +167,6 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.get("/api/conversations", (_req, res) => {
-  res.json({ conversations: store.listConversations() });
-});
-
-app.get("/api/conversations/:externalUserId/messages", (req, res) => {
-  res.json({
-    externalUserId: req.params.externalUserId,
-    messages: store.getMessages(req.params.externalUserId),
-  });
-});
-
-app.get("/api/conversations/:externalUserId/events", (req, res) => {
-  const { externalUserId } = req.params;
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders?.();
-  res.write('event: connected\ndata: {"status":"ok"}\n\n');
-
-  store.createSseClient(externalUserId, res);
-
-  req.on("close", () => {
-    store.removeSseClient(externalUserId, res);
-  });
-});
-
 app.post("/api/messages", async (req, res) => {
   const requestId = req.header("x-request-id") || crypto.randomUUID();
   const validationErrors = validateIncomingMessage(req.body);
@@ -208,21 +179,8 @@ app.post("/api/messages", async (req, res) => {
     });
   }
 
-  const inbound = buildManualInboundMessage(req.body);
-  store.upsertConversation(inbound.externalUserId, {
-    channel: req.body.channel || "CUSTOM",
-    latestInboundAt: inbound.timestamp,
-  });
-
   try {
     const genesysResponse = await sendInboundToGenesys(inbound);
-    store.addMessage(
-      inbound.externalUserId,
-      serializeMessage("inbound", "CUSTOM_API", {
-        ...inbound,
-        raw: req.body,
-      }),
-    );
 
     return res.status(202).json({
       requestId,
@@ -288,18 +246,6 @@ app.post("/webhooks/sinch", async (req, res) => {
     });
   }
 
-  const dedupeKey = buildSinchDedupeKey({
-    callback,
-    fallbackNonce: req.header("x-sinch-webhook-signature-nonce"),
-  });
-
-  if (store.hasProcessed(dedupeKey)) {
-    return res.status(200).json({
-      requestId,
-      status: "duplicate_ignored",
-    });
-  }
-
   try {
     if (callback.kind === "message_inbound") {
       if (!callback.externalUserId) {
@@ -320,21 +266,6 @@ app.post("/webhooks/sinch", async (req, res) => {
 
       await sendInboundToGenesys(callback);
 
-      store.upsertConversation(callback.externalUserId, {
-        channel: "RCS",
-        sinchIdentity: callback.externalUserId,
-        sinchConversationId: callback.metadata?.sinchConversationId || null,
-        sinchContactId: callback.metadata?.sinchContactId || null,
-        latestInboundAt: callback.timestamp,
-      });
-
-      store.addMessage(
-        callback.externalUserId,
-        serializeMessage("inbound", "SINCH_RCS", callback),
-      );
-
-      store.rememberProcessed(dedupeKey);
-
       return res.status(200).json({
         requestId,
         status: "accepted",
@@ -347,24 +278,6 @@ app.post("/webhooks/sinch", async (req, res) => {
       );
 
       if (!correlatedGenesysMessageId) {
-        if (callback.externalUserId) {
-          store.addMessage(callback.externalUserId, {
-            id: callback.sinchMessageId || crypto.randomUUID(),
-            direction: "event",
-            source: "SINCH_DELIVERY",
-            timestamp: callback.timestamp,
-            text: null,
-            mediaUrl: null,
-            metadata: {
-              originalSinchStatus: callback.status,
-              ...callback.metadata,
-            },
-            raw: callback.raw,
-          });
-        }
-
-        store.rememberProcessed(dedupeKey);
-
         return res.status(200).json({
           requestId,
           status: "ignored_no_correlation",
@@ -386,33 +299,11 @@ app.post("/webhooks/sinch", async (req, res) => {
 
       await genesysClient.sendInboundReceipt(receiptPayload);
 
-      if (callback.externalUserId) {
-        store.addMessage(callback.externalUserId, {
-          id: callback.sinchMessageId || crypto.randomUUID(),
-          direction: "event",
-          source: "SINCH_DELIVERY",
-          timestamp: callback.timestamp,
-          text: null,
-          mediaUrl: null,
-          metadata: {
-            status: genesysStatus,
-            originalSinchStatus: callback.status,
-            genesysMessageId: correlatedGenesysMessageId,
-            ...callback.metadata,
-          },
-          raw: callback.raw,
-        });
-      }
-
-      store.rememberProcessed(dedupeKey);
-
       return res.status(200).json({
         requestId,
         status: "accepted",
       });
     }
-
-    store.rememberProcessed(dedupeKey);
 
     return res.status(200).json({
       requestId,
@@ -462,13 +353,6 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
   }
 
   const outbound = parseGenesysOutboundMessage(req.body);
-  const dedupeKey = `genesys:${outbound.id}:${outbound.timestamp}`;
-
-  if (store.hasProcessed(dedupeKey)) {
-    return res.status(200).json({ requestId, status: "duplicate_ignored" });
-  }
-
-  store.rememberProcessed(dedupeKey);
 
   try {
     const requests = buildSinchRequestsFromGenesysMessage({
@@ -479,30 +363,6 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
     const results = [];
     for (const request of requests) {
       results.push(await sinchClient.sendMessage(request));
-    }
-
-    if (outbound.customerId) {
-      store.upsertConversation(outbound.customerId, {
-        channel: "RCS",
-        sinchIdentity: outbound.customerId,
-        latestOutboundAt: outbound.timestamp,
-      });
-
-      store.addMessage(
-        outbound.customerId,
-        serializeMessage("outbound", "GENESYS_AGENT", {
-          id: outbound.id,
-          messageId: outbound.id,
-          timestamp: outbound.timestamp,
-          text: outbound.text,
-          mediaUrl: outbound.attachments[0]?.url,
-          metadata: {
-            agentId: outbound.agentId,
-            requestCount: requests.length,
-          },
-          raw: req.body,
-        }),
-      );
     }
 
     return res.status(200).json({
