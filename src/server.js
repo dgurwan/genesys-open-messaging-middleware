@@ -258,6 +258,14 @@ app.post("/webhooks/sinch", async (req, res) => {
         latestInboundAt: callback.timestamp,
       });
 
+      console.log("Received inbound message from Sinch:", {
+        externalUserId: callback.externalUserId,
+        messageId: callback.messageId,
+        text: callback.text,
+        mediaUrl: callback.mediaUrl,
+        metadata: callback.metadata,
+      });
+
       await sendInboundToGenesys(callback);
       store.addMessage(
         callback.externalUserId,
