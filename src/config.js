@@ -115,7 +115,8 @@ export function loadConfig() {
         process.env.SINCH_SIGNATURE_MAX_SKEW_SECONDS || 300,
       ),
       forceChannel: "RCS",
-      webhookId: getRequired("WEBHOOK_SITE_ID"),
+      mock: parseBoolean(getRequired("SINCH_MOCK_WEBHOOKS"), false),
+      webhookId: getRequired("SINCH_WEBHOOK_SITE_ID"),
     },
     storage: {
       maxMessagesPerConversation: Number(

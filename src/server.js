@@ -32,6 +32,7 @@ console.log("Loaded configuration:", {
     forceChannel: config.sinch.forceChannel,
     signatureMaxSkewSeconds: config.sinch.signatureMaxSkewSeconds,
     webhook_id: config.sinch.webhookId,
+    mockEnabled: config.sinch.mock,
   },
 });
 

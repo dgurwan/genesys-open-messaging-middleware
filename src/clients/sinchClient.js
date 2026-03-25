@@ -27,17 +27,29 @@ export class SinchClient {
 
   async request(path, { method = "GET", body } = {}) {
     const token = await this.getAccessToken();
+    const mockEnabled = this.config.mockEnabled;
 
     //mock response for testing with webhook.site, uncomment for real submission to Sinch Conversation API
     // delete this after testing
+    let url;
 
-    let url = `https://webhook.site/${encodeURIComponent(this.config.webhookId)}`;
-    console.log("SinchClient : [MOCK]Enter MOCK");
-    console.log(
-      "SinchClient : [MOCK]Sending request to URL:",
-      JSON.stringify(url),
-    );
-    console.log("SinchClient : [MOCK]Request method:", JSON.stringify(method));
+    if (mockEnabled) {
+      url = `https://webhook.site/${encodeURIComponent(this.config.webhookId)}`;
+    } else {
+      url = `${this.config.conversationBaseUrl}${path}`;
+    }
+
+    if (mockEnabled) {
+      console.log("SinchClient : [MOCK]Enter MOCK");
+      console.log(
+        "SinchClient : [MOCK]Sending request to URL:",
+        JSON.stringify(url),
+      );
+      console.log(
+        "SinchClient : [MOCK]Request method:",
+        JSON.stringify(method),
+      );
+    }
 
     const webhookResponse = await fetch(url, {
       method,
@@ -48,23 +60,9 @@ export class SinchClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    console.log("SinchClient : [MOCK] Exit Mock");
-
-    return {
-      status: webhookResponse.status,
-      body: await webhookResponse.text(),
-    };
-
-    /* Real Submission to Sinch Conversation API, uncomment after testing with webhook.site  
-    const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    }); 
-
+    if (mockEnabled) {
+      console.log("SinchClient : [MOCK] Exit Mock");
+    }
 
     const responseBody = await this.readResponseBody(response);
 
@@ -81,7 +79,7 @@ export class SinchClient {
       });
     }
 
-    return responseBody; */
+    return responseBody;
   }
 
   async getAccessToken() {
