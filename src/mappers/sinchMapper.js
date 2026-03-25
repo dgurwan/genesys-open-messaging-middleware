@@ -194,6 +194,7 @@ export function buildSinchRequestsFromGenesysMessage({
   return requests;
 }
 
+// all the logic to parse the Sinch callback payload and map it to a common format for the rest of the app to consume
 export function parseSinchCallback(payload) {
   if (payload?.message) {
     const message = payload.message;

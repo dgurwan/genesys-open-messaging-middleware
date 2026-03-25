@@ -81,11 +81,6 @@ async function sendInboundToGenesys(inbound) {
     includeAttachmentContent: config.genesys.includeAttachmentContent,
   });
 
-  console.log(
-    "sendInboundToGenesys : Push to Genesys Cloud with payload:",
-    JSON.stringify(primaryPayload, null, 2),
-  );
-
   try {
     return await genesysClient.sendInboundMessage(primaryPayload);
   } catch (error) {
@@ -169,7 +164,7 @@ app.get("/health", (_req, res) => {
 
 app.post("/webhooks/sinch", async (req, res) => {
   console.log(
-    "Received from Sinch at /webhooks/sinch with body:",
+    "Step 1 : /webhooks/sinch - Received from Sinch following payload => ",
     JSON.stringify(req.body, null, 4),
   );
 
@@ -192,9 +187,11 @@ app.post("/webhooks/sinch", async (req, res) => {
     });
   }
 
-  let callback;
+  // format the callback data in a way that is easier to work with for the rest of the app and to abstract away any Sinch-specific details
+  let nestedPayload;
   try {
-    callback = parseSinchCallback(req.body);
+    console.log("Step 2 : /webhooks/sinch - Parsing Sinch callback payload");
+    nestedPayload = parseSinchCallback(req.body);
   } catch (error) {
     logError(requestId, "Failed to parse Sinch callback.", error);
     return res.status(400).json({
@@ -205,8 +202,8 @@ app.post("/webhooks/sinch", async (req, res) => {
   }
 
   try {
-    if (callback.kind === "message_inbound") {
-      if (!callback.externalUserId) {
+    if (nestedPayload.kind === "message_inbound") {
+      if (!nestedPayload.externalUserId) {
         return res.status(400).json({
           requestId,
           error: "BadRequest",
@@ -214,14 +211,10 @@ app.post("/webhooks/sinch", async (req, res) => {
         });
       }
 
-      console.log("Received inbound message from Sinch:", {
-        externalUserId: callback.externalUserId,
-        messageId: callback.messageId,
-        text: callback.text,
-        mediaUrl: callback.mediaUrl,
-        metadata: callback.metadata,
-      });
-
+      // if the message is valid and contains all the necessary information, map it to the Genesys Cloud format and send it to Genesys Cloud as an inbound message
+      console.log(
+        "Step 3 : sendInboundToGenesys - Push to Genesys Cloud with payload",
+      );
       await sendInboundToGenesys(callback);
 
       return res.status(200).json({
@@ -256,6 +249,7 @@ app.post("/webhooks/sinch", async (req, res) => {
   }
 });
 
+// Endpoint to receive outbound messages from Genesys Cloud and forward them to Sinch Conversation API
 app.post("/webhooks/genesys/outbound", async (req, res) => {
   const requestId = req.header("x-request-id") || crypto.randomUUID();
   const signatureValid = verifyGenesysSignature({
@@ -279,8 +273,8 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
 
   console.log("Genesys outbound webhook signature verified successfully.");
 
-  if (req.body?.type === "receipt") {
-    console.log("Received receipt from Genesys, ignoring. !");
+  if (req.body?.type === "Receipt") {
+    console.log("Received Receipt from Genesys, ignoring!!!");
     return res.status(200).json({
       requestId,
       status: "ignored",
