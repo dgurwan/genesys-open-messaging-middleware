@@ -16,7 +16,6 @@ export class SinchClient {
       JSON.stringify(messagePayload),
     );
 
-    //return;
     return this.request(
       `/v1/projects/${encodeURIComponent(this.config.projectId)}/messages:send`,
       {
@@ -28,21 +27,31 @@ export class SinchClient {
 
   async request(path, { method = "GET", body } = {}) {
     const token = await this.getAccessToken();
-    const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
 
-    console.log(
-      "TO SINCH  => Response body:",
-      JSON.stringify(await response.text()),
+    //const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
+    const response = await fetch(
+      `https://webhook.site/03ad95f0-e67c-4f7d-96cb-8d0374094d25`,
+      {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      },
     );
 
-    const responseBody = await this.readResponseBody(response);
+    const rawText = await response.text();
+    console.log("TO SINCH => Response status:", response.status);
+    console.log("TO SINCH => Response body:", JSON.stringify(rawText));
+
+    let responseBody = {};
+    try {
+      responseBody = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      responseBody = { raw: rawText };
+    }
+
     if (!response.ok) {
       throw new HttpIntegrationError("Sinch Conversation API request failed.", {
         status: response.status,

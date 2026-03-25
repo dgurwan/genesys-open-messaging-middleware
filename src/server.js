@@ -277,7 +277,15 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
     });
   }
 
-  if (req.body?.type === "receipt") return;
+  console.log("Genesys outbound webhook signature verified successfully.");
+
+  if (req.body?.type === "receipt") {
+    console.log("Received receipt from Genesys, ignoring. !");
+    return res.status(200).json({
+      requestId,
+      status: "ignored",
+    });
+  }
 
   const outbound = parseGenesysOutboundMessage(req.body);
 
