@@ -23,10 +23,6 @@ function basenameFromUrl(url) {
   }
 }
 
-// buildGenesysInboundPayload constructs the payload to send to Genesys when sending a message to them,
-// based on the provided parameters.
-// It includes the external user ID, message ID, timestamp, nickname, text, metadata, and media URL.
-// The function also sanitizes custom attributes and guesses the content type of any media attachments.
 export function buildGenesysInboundPayload({
   externalUserId,
   messageId,
@@ -79,4 +75,22 @@ export function buildGenesysInboundPayload({
   }
 
   return payload;
+}
+
+export function buildGenesysReceiptPayload({
+  messageId,
+  status,
+  timestamp,
+  metadata = {},
+}) {
+  return {
+    messageId,
+    status,
+    channel: {
+      time: timestamp,
+      metadata: {
+        customAttributes: sanitizeCustomAttributes(metadata),
+      },
+    },
+  };
 }
