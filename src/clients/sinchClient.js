@@ -12,7 +12,7 @@ export class SinchClient {
 
   async sendMessage(messagePayload) {
     console.log(
-      "TO SINCH  => Sending message with payload:",
+      "SinchClient => Sending message to Sinch with payload:",
       JSON.stringify(messagePayload),
     );
 
@@ -31,26 +31,30 @@ export class SinchClient {
     //mock response for testing with webhook.site, uncomment for real submission to Sinch Conversation API
     // delete this after testing
 
-    let url = `https://webhook.site/${encodeURIComponent(this.config.webhookSiteId)}`;
-    console.log("SinchClient : Sending request to URL:", JSON.stringify(url));
-    console.log("SinchClient : Request method:", JSON.stringify(method));
-    console.log("SinchClient : Request body:", JSON.stringify(body));
-
-    const webhookResponse = await fetch(
-      `https://webhook.site/${encodeURIComponent(this.config.webhookSiteId)}`,
-      {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: body ? JSON.stringify(body) : undefined,
-      },
+    let url = `https://webhook.site/${encodeURIComponent(this.config.webhookId)}`;
+    console.log("SinchClient : [MOCK]Enter MOCK");
+    console.log(
+      "SinchClient : [MOCK]Sending request to URL:",
+      JSON.stringify(url),
     );
+    console.log("SinchClient : [MOCK]Request method:", JSON.stringify(method));
+
+    const webhookResponse = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    console.log("SinchClient : [MOCK] Exit Mock");
+
     return {
       status: webhookResponse.status,
       body: await webhookResponse.text(),
     };
+
     /* Real Submission to Sinch Conversation API, uncomment after testing with webhook.site  
     const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
       method,
