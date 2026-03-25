@@ -27,8 +27,17 @@ export class SinchClient {
 
   async request(path, { method = "GET", body } = {}) {
     const token = await this.getAccessToken();
-    //const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
-    const response = await fetch(
+    const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    // delete this after testing
+    const webhookResponse = await fetch(
       `https://webhook.site/03ad95f0-e67c-4f7d-96cb-8d0374094d25`,
       {
         method,
