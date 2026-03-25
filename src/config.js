@@ -115,7 +115,7 @@ export function loadConfig() {
         process.env.SINCH_SIGNATURE_MAX_SKEW_SECONDS || 300,
       ),
       forceChannel: "RCS",
-      mock: parseBoolean(getRequired("SINCH_MOCK_WEBHOOKS"), false),
+      mockEnabled: parseBoolean(getRequired("SINCH_MOCK_WEBHOOKS"), false),
       webhookId: getRequired("SINCH_WEBHOOK_SITE_ID"),
     },
     storage: {

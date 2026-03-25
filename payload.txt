@@ -1,0 +1,39 @@
+{
+    "id": "8085cbb3f778c34de0bd14c5318ec44c",
+    "channel": {
+        "id": "6685901b-6d0e-43db-95ff-d64406e9dce2",
+        "platform": "Open",
+        "type": "Private",
+        "to": {
+            "id": "33633081329",
+            "idType": "Opaque"
+        },
+        "from": {
+            "nickname": "Sinch Messaging",
+            "id": "6685901b-6d0e-43db-95ff-d64406e9dce2",
+            "idType": "Opaque"
+        },
+        "metadata": {
+            "subType": "None"
+        },
+        "time": "2026-03-25T13:20:05.493Z",
+        "messageId": "8085cbb3f778c34de0bd14c5318ec44c"
+    },
+    "type": "Text",
+    "content": [
+        {
+            "contentType": "Attachment",
+            "attachment": {
+                "id": "9ff268ef-c642-4abe-a776-ea013e684f5d",
+                "mediaType": "Image",
+                "url": "https://api-downloads.mypurecloud.ie/api/v2/downloads/pce9ac7dc17eab202a3",
+                "mime": "image/png",
+                "filename": "Header_Genesys.png",
+                "contentSizeBytes": 2444
+            }
+        }
+    ],
+    "originatingEntity": "Human",
+    "direction": "Outbound",
+    "conversationId": "1734d888-3c0e-47bc-bacb-e9996a16b682"
+}
