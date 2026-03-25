@@ -23,16 +23,6 @@ export class GenesysClient {
     );
   }
 
-  async sendInboundReceipt(receiptPayload) {
-    return this.request(
-      `/api/v2/conversations/messages/${encodeURIComponent(this.config.integrationId)}/inbound/open/receipt`,
-      {
-        method: "POST",
-        body: receiptPayload,
-      },
-    );
-  }
-
   async request(path, { method = "GET", body } = {}) {
     const token = await this.getAccessToken();
     const response = await fetch(`${this.config.apiBaseUrl}${path}`, {

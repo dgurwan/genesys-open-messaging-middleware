@@ -27,15 +27,8 @@ export class SinchClient {
 
   async request(path, { method = "GET", body } = {}) {
     const token = await this.getAccessToken();
-    const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
 
+    //mock response for testing with webhook.site, uncomment for real submission to Sinch Conversation API
     // delete this after testing
     const webhookResponse = await fetch(
       `https://webhook.site/03ad95f0-e67c-4f7d-96cb-8d0374094d25`,
@@ -48,6 +41,20 @@ export class SinchClient {
         body: body ? JSON.stringify(body) : undefined,
       },
     );
+    return {
+      status: webhookResponse.status,
+      body: await webhookResponse.text(),
+    };
+    /* Real Submission to Sinch Conversation API, uncomment after testing with webhook.site  
+    const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    }); 
+
 
     const responseBody = await this.readResponseBody(response);
 
@@ -64,7 +71,7 @@ export class SinchClient {
       });
     }
 
-    return responseBody;
+    return responseBody; */
   }
 
   async getAccessToken() {

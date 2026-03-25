@@ -126,52 +126,17 @@ npm start
 
 Le serveur écoute par défaut sur `http://localhost:3000`.
 
-## Endpoint 1 - test / injection manuelle
-
-### `POST /api/messages`
-
-Exemple texte :
-
-```bash
-curl -X POST http://localhost:3000/api/messages \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "externalUserId": "33612345678",
-    "nickname": "Jean Dupont",
-    "text": "Bonjour, j ai besoin d aide",
-    "metadata": {
-      "sourceChannel": "manual-test"
-    }
-  }'
-```
-
-Exemple média :
-
-```bash
-curl -X POST http://localhost:3000/api/messages \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "externalUserId": "33612345678",
-    "text": "Voici un justificatif",
-    "mediaUrl": "https://example.com/file.pdf",
-    "metadata": {
-      "sourceChannel": "manual-test"
-    }
-  }'
-```
-
-## Endpoint 2 - callback Sinch
+## Endpoint 1 - callback Sinch
 
 ### `POST /webhooks/sinch`
 
 Le middleware attend un callback signé Sinch. Il :
 
 - valide la signature HMAC
-- détecte `message` ou `message_delivery_report`
+- détecte `message`
 - transforme le message RCS vers Genesys inbound
-- transforme les receipts Sinch vers Genesys inbound receipt
 
-## Endpoint 3 - callback Genesys
+## Endpoint 2 - callback Genesys
 
 ### `POST /webhooks/genesys/outbound`
 
@@ -182,27 +147,12 @@ Le middleware attend un message normalisé Genesys signé. Il :
 - convertit le message agent vers `text_message`, `media_message`, `choice_message`, `card_message` ou `carousel_message`
 - envoie le message à Sinch Conversation API
 
-## Endpoints de debug
-
-### `GET /api/conversations`
-
-Retourne les conversations connues en mémoire.
-
-### `GET /api/conversations/:externalUserId/messages`
-
-Retourne l'historique d'une conversation.
-
-### `GET /api/conversations/:externalUserId/events`
-
-SSE simple pour suivre les événements en temps réel.
-
 ## Structure du projet
 
 ```text
 .
 ├── .env.example
 ├── .gitignore
-├── Dockerfile
 ├── README.md
 ├── package.json
 └── src

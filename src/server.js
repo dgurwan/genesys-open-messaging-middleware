@@ -53,7 +53,7 @@ function logError(requestId, message, error, extra = {}) {
   );
 }
 
-async function sendInboundToGenesys(inbound) {
+async function pushToGenesys(inbound) {
   const primaryPayload = buildGenesysInboundPayload({
     externalUserId: inbound.externalUserId,
     messageId: inbound.messageId,
@@ -102,7 +102,7 @@ function normalizeGenesysMessageId(value) {
   return value.replace(/:(text|media)$/i, "");
 }
 
-async function dispatchGenesysOutboundMessage(outbound) {
+async function pushToSinch(outbound) {
   const requests = buildSinchRequestsFromGenesysMessage({
     appId: config.sinch.appId,
     genesysMessage: outbound,
@@ -126,6 +126,9 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// Sinch will send incoming RCS messages to this endpoint,
+// we verify the signature, parse the message,
+// and then forward it to Genesys Cloud in the correct format for an inbound message
 app.post("/webhooks/sinch", async (req, res) => {
   console.log(
     "Step 1 : /webhooks/sinch - Received from Sinch following payload => ",
@@ -177,10 +180,10 @@ app.post("/webhooks/sinch", async (req, res) => {
 
       // if the message is valid and contains all the necessary information, map it to the Genesys Cloud format and send it to Genesys Cloud as an inbound message
       console.log(
-        "Step 3 : sendInboundToGenesys - Push to Genesys Cloud with payload",
+        "Step 3 : pushToGenesys - Push to Genesys Cloud with payload",
       );
 
-      await sendInboundToGenesys(nestedPayload);
+      await pushToGenesys(nestedPayload);
 
       return res.status(200).json({
         requestId,
@@ -214,6 +217,9 @@ app.post("/webhooks/sinch", async (req, res) => {
   }
 });
 
+// Genesys will send outbound message events to this endpoint,
+// we verify the signature, parse the message,
+// and then forward it to Sinch in the correct format for sending an RCS message
 app.post("/webhooks/genesys/outbound", async (req, res) => {
   const requestId = req.header("x-request-id") || crypto.randomUUID();
 
@@ -273,13 +279,13 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
   try {
     const execution = dedupeKey
       ? await genesysOutboundIdempotency.run(dedupeKey, async () =>
-          dispatchGenesysOutboundMessage(outbound),
+          pushToSinch(outbound),
         )
       : {
           key: null,
           duplicate: false,
           state: "not_tracked",
-          value: await dispatchGenesysOutboundMessage(outbound),
+          value: await pushToSinch(outbound),
         };
 
     return res.status(200).json({
@@ -308,12 +314,7 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
   }
 });
 
-app.use((err, req, res, _next) => {
-  const requestId = req.header("x-request-id") || crypto.randomUUID();
-  logError(requestId, "Unhandled Express error.", err);
-  res.status(500).json({ requestId, error: "InternalServerError" });
-});
-
+// start the server
 function start() {
   app.listen(config.port, () => {
     logInfo("startup", `${config.serviceName} listening`, {
