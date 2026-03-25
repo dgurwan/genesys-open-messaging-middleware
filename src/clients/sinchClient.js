@@ -30,6 +30,12 @@ export class SinchClient {
 
     //mock response for testing with webhook.site, uncomment for real submission to Sinch Conversation API
     // delete this after testing
+
+    let url = `https://webhook.site/${encodeURIComponent(this.config.webhookSiteId)}`;
+    console.log("SinchClient : Sending request to URL:", JSON.stringify(url));
+    console.log("SinchClient : Request method:", JSON.stringify(method));
+    console.log("SinchClient : Request body:", JSON.stringify(body));
+
     const webhookResponse = await fetch(
       `https://webhook.site/${encodeURIComponent(this.config.webhookSiteId)}`,
       {
