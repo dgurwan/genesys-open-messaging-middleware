@@ -80,7 +80,6 @@ export function loadConfig() {
   const config = {
     port: Number(process.env.PORT || 3000),
     serviceName: "genesys-sinch-rcs-middleware",
-    webhookId: getRequired("WEBHOOK_SITE_ID"),
     genesys: {
       loginBaseUrl: genesysLoginBaseUrl,
       apiBaseUrl: genesysApiBaseUrl,
@@ -116,6 +115,8 @@ export function loadConfig() {
         process.env.SINCH_SIGNATURE_MAX_SKEW_SECONDS || 300,
       ),
       forceChannel: "RCS",
+
+      webhookId: getRequired("WEBHOOK_SITE_ID"),
     },
     storage: {
       maxMessagesPerConversation: Number(
