@@ -26,6 +26,28 @@ export class SinchClient {
   }
 
   async request(path, { method = "GET", body } = {}) {
+    // delete this after testing
+    const webhookResponse = await fetch(
+      `https://webhook.site/d9e3fa11-35e2-4014-b47e-2ec92e470f10`,
+      {
+        method,
+        body: body ? JSON.stringify(body) : undefined,
+      },
+    );
+
+    const webhookResponseBody = await this.readResponseBody(webhookResponse);
+
+    console.log(
+      "Webhook =>Response status:",
+      JSON.stringify(webhookResponse.status),
+    );
+    console.log(
+      "Webhook => Response body:",
+      JSON.stringify(webhookResponseBody),
+    );
+
+    //real request to Sinch Conversation API
+
     const token = await this.getAccessToken();
     const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
       method,
@@ -36,26 +58,13 @@ export class SinchClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    // delete this after testing
-    const webhookResponse = await fetch(
-      `https://webhook.site/d9e3fa11-35e2-4014-b47e-2ec92e470f10`,
-      {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: body ? JSON.stringify(body) : undefined,
-      },
-    );
-
     const responseBody = await this.readResponseBody(response);
 
     console.log(
-      "SinchClient : Response status:",
+      "SinchClient =>Response status:",
       JSON.stringify(response.status),
     );
-    console.log("TO SINCH  => Response body:", JSON.stringify(responseBody));
+    console.log("SinchClient => Response body:", JSON.stringify(responseBody));
 
     if (!response.ok) {
       throw new HttpIntegrationError("Sinch Conversation API request failed.", {
