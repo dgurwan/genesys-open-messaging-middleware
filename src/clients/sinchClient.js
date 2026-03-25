@@ -31,7 +31,7 @@ export class SinchClient {
     //mock response for testing with webhook.site, uncomment for real submission to Sinch Conversation API
     // delete this after testing
     const webhookResponse = await fetch(
-      `https://webhook.site/03ad95f0-e67c-4f7d-96cb-8d0374094d25`,
+      `https://webhook.site/${encodeURIComponent(this.config.webhookSiteId)}`,
       {
         method,
         headers: {
