@@ -277,6 +277,8 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
     });
   }
 
+  if (req.body?.type === "receipt") return;
+
   const outbound = parseGenesysOutboundMessage(req.body);
 
   try {
