@@ -38,7 +38,7 @@ export class SinchClient {
 
     // delete this after testing
     const webhookResponse = await fetch(
-      `https://webhook.site/03ad95f0-e67c-4f7d-96cb-8d0374094d25`,
+      `https://webhook.site/d9e3fa11-35e2-4014-b47e-2ec92e470f10`,
       {
         method,
         headers: {
