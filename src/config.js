@@ -80,7 +80,7 @@ export function loadConfig() {
   const config = {
     port: Number(process.env.PORT || 3000),
     serviceName: "genesys-sinch-rcs-middleware",
-    webhookId: getRequired("GENESYS_OUTBOUND_WEBHOOK_ID"),
+    webhookId: getRequired("WEBHOOK_SITE_ID"),
     genesys: {
       loginBaseUrl: genesysLoginBaseUrl,
       apiBaseUrl: genesysApiBaseUrl,
