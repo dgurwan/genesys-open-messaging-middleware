@@ -14,28 +14,6 @@ import {
 import { InMemoryIdempotencyStore } from "./idempotencyStore.js";
 
 const config = loadConfig();
-
-console.log("Loaded configuration:", {
-  serviceName: config.serviceName,
-  port: config.port,
-  genesys: {
-    loginBaseUrl: config.genesys.loginBaseUrl,
-    apiBaseUrl: config.genesys.apiBaseUrl,
-    integrationId: config.genesys.integrationId,
-    includeAttachmentContent: config.genesys.includeAttachmentContent,
-    outboundDedupeTtlSeconds: config.genesys.outboundDedupeTtlSeconds,
-  },
-  sinch: {
-    conversationBaseUrl: config.sinch.conversationBaseUrl,
-    projectId: config.sinch.projectId,
-    appId: config.sinch.appId,
-    forceChannel: config.sinch.forceChannel,
-    signatureMaxSkewSeconds: config.sinch.signatureMaxSkewSeconds,
-    webhook_id: config.sinch.webhookId,
-    mockEnabled: config.sinch.mock,
-  },
-});
-
 const genesysClient = new GenesysClient(config.genesys);
 const sinchClient = new SinchClient(config.sinch);
 const genesysOutboundIdempotency = new InMemoryIdempotencyStore({
