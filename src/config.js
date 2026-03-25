@@ -115,7 +115,6 @@ export function loadConfig() {
         process.env.SINCH_SIGNATURE_MAX_SKEW_SECONDS || 300,
       ),
       forceChannel: "RCS",
-
       webhookId: getRequired("WEBHOOK_SITE_ID"),
     },
     storage: {
