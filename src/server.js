@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import express from "express";
 import { loadConfig } from "./config.js";
-import { HttpIntegrationError } from "../errors.js";
+import { HttpIntegrationError } from "./errors.js";
 import { verifyGenesysSignature, verifySinchSignature } from "./signatures.js";
 import { GenesysClient } from "./clients/genesysClient.js";
 import { SinchClient } from "./clients/sinchClient.js";
