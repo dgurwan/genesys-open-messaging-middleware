@@ -10,6 +10,11 @@ function parseBoolean(value, defaultValue = false) {
   return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
 }
 
+function parsePositiveNumber(value, defaultValue) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
+}
+
 function normalizeUrl(url) {
   return url ? url.replace(/\/+$/, '') : '';
 }
@@ -70,7 +75,8 @@ export function loadConfig() {
       outboundWebhookSecret: getRequired('GENESYS_OUTBOUND_WEBHOOK_SECRET'),
       prefetchConversationId: parseBoolean(process.env.GENESYS_PREFETCH_CONVERSATION_ID, false),
       maxMessageBytes: Number(process.env.GENESYS_MAX_MESSAGE_BYTES || 131072),
-      includeAttachmentContent: parseBoolean(process.env.GENESYS_INCLUDE_ATTACHMENT_CONTENT, true)
+      includeAttachmentContent: parseBoolean(process.env.GENESYS_INCLUDE_ATTACHMENT_CONTENT, true),
+      outboundDedupeTtlSeconds: parsePositiveNumber(process.env.GENESYS_OUTBOUND_DEDUPE_TTL_SECONDS, 600)
     },
     sinch: {
       authBaseUrl: normalizeUrl(process.env.SINCH_AUTH_BASE_URL || 'https://auth.sinch.com'),

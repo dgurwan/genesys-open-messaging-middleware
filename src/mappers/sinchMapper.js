@@ -2,15 +2,6 @@ function asNonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function firstArray(...candidates) {
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate) && candidate.length > 0) {
-      return candidate;
-    }
-  }
-  return [];
-}
-
 function mapQuickReplyChoice(choice, index) {
   const text =
     asNonEmptyString(choice?.title) ||
@@ -51,29 +42,20 @@ function extractQuickReplies(payload) {
     "text": "Confirm"
     }
   }*/
-
   if (Array.isArray(payload?.content)) {
     const nested = [];
-    for (const item of payload.content) {
-      if (item.quickReply && item.quickReply.text) {
-        nested.push(item.quickReply);
-        // nested.push({ text_message: { text: item.quickReply.text } });
-      }
 
-      /*  const nested = firstArray(
-        item?.quickReply,
-        item?.quickReplies,
-        item?.quick_replies,
-        item?.choices,
-        item?.buttons,
-        item?.actions,
-      ); */
+    for (const item of payload.content) {
+      if (item?.quickReply?.text) {
+        nested.push(item.quickReply);
+      }
     }
 
     console.log(
       "extractQuickReplies : Extracted quick replies from nested content:",
       JSON.stringify(nested),
     );
+
     if (nested.length > 0) {
       return nested;
     }
@@ -83,8 +65,8 @@ function extractQuickReplies(payload) {
 }
 
 export function parseGenesysOutboundMessage(payload) {
-  if (payload && payload.type == "receipt") {
-    return;
+  if (String(payload?.type || "").toLowerCase() === "receipt") {
+    return null;
   }
 
   const id =
@@ -194,7 +176,6 @@ export function buildSinchRequestsFromGenesysMessage({
   return requests;
 }
 
-// all the logic to parse the Sinch callback payload and map it to a common format for the rest of the app to consume
 export function parseSinchCallback(payload) {
   if (payload?.message) {
     const message = payload.message;

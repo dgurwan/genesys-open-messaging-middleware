@@ -1,25 +1,25 @@
-import path from 'node:path';
-import { sanitizeCustomAttributes } from '../validation.js';
+import path from "node:path";
+import { sanitizeCustomAttributes } from "../validation.js";
 
 function guessContentType(url) {
-  const lower = String(url || '').toLowerCase();
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-  if (lower.endsWith('.png')) return 'image/png';
-  if (lower.endsWith('.gif')) return 'image/gif';
-  if (lower.endsWith('.webp')) return 'image/webp';
-  if (lower.endsWith('.pdf')) return 'application/pdf';
-  if (lower.endsWith('.mp4')) return 'video/mp4';
-  if (lower.endsWith('.mp3')) return 'audio/mpeg';
-  if (lower.endsWith('.wav')) return 'audio/wav';
-  return 'application/octet-stream';
+  const lower = String(url || "").toLowerCase();
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".mp4")) return "video/mp4";
+  if (lower.endsWith(".mp3")) return "audio/mpeg";
+  if (lower.endsWith(".wav")) return "audio/wav";
+  return "application/octet-stream";
 }
 
 function basenameFromUrl(url) {
   try {
     const pathname = new URL(url).pathname;
-    return path.basename(pathname) || 'attachment';
+    return path.basename(pathname) || "attachment";
   } catch {
-    return 'attachment';
+    return "attachment";
   }
 }
 
@@ -31,7 +31,7 @@ export function buildGenesysInboundPayload({
   text,
   metadata = {},
   mediaUrl,
-  includeAttachmentContent = true
+  includeAttachmentContent = true,
 }) {
   const customAttributes = sanitizeCustomAttributes(metadata);
 
@@ -40,11 +40,11 @@ export function buildGenesysInboundPayload({
       messageId,
       from: {
         id: externalUserId,
-        idType: 'Opaque'
+        idType: "Opaque",
       },
-      time: timestamp
+      time: timestamp,
     },
-    direction: 'Inbound'
+    direction: "Inbound",
   };
 
   if (nickname) {
@@ -53,7 +53,7 @@ export function buildGenesysInboundPayload({
 
   if (Object.keys(customAttributes).length > 0) {
     payload.channel.metadata = {
-      customAttributes
+      customAttributes,
     };
   }
 
@@ -64,28 +64,33 @@ export function buildGenesysInboundPayload({
   if (mediaUrl && includeAttachmentContent) {
     payload.content = [
       {
-        contentType: 'Attachment',
+        contentType: "Attachment",
         attachment: {
           url: mediaUrl,
           contentType: guessContentType(mediaUrl),
-          filename: basenameFromUrl(mediaUrl)
-        }
-      }
+          filename: basenameFromUrl(mediaUrl),
+        },
+      },
     ];
   }
 
   return payload;
 }
 
-export function buildGenesysReceiptPayload({ messageId, status, timestamp, metadata = {} }) {
+export function buildGenesysReceiptPayload({
+  messageId,
+  status,
+  timestamp,
+  metadata = {},
+}) {
   return {
     messageId,
     status,
     channel: {
       time: timestamp,
       metadata: {
-        customAttributes: sanitizeCustomAttributes(metadata)
-      }
-    }
+        customAttributes: sanitizeCustomAttributes(metadata),
+      },
+    },
   };
 }

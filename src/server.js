@@ -1,27 +1,24 @@
 import crypto from "node:crypto";
 import express from "express";
 import { loadConfig } from "./config.js";
-import { HttpIntegrationError } from "./errors.js";
+import { HttpIntegrationError } from "../errors.js";
 import { verifyGenesysSignature, verifySinchSignature } from "./signatures.js";
-import {
-  buildManualInboundMessage,
-  validateIncomingMessage,
-} from "./validation.js";
 import { GenesysClient } from "./clients/genesysClient.js";
 import { SinchClient } from "./clients/sinchClient.js";
-import {
-  buildGenesysInboundPayload,
-  buildGenesysReceiptPayload,
-} from "./mappers/genesysMapper.js";
+import { buildGenesysInboundPayload } from "./mappers/genesysMapper.js";
 import {
   buildSinchRequestsFromGenesysMessage,
   parseGenesysOutboundMessage,
   parseSinchCallback,
 } from "./mappers/sinchMapper.js";
+import { InMemoryIdempotencyStore } from "./idempotencyStore.js";
 
 const config = loadConfig();
 const genesysClient = new GenesysClient(config.genesys);
 const sinchClient = new SinchClient(config.sinch);
+const genesysOutboundIdempotency = new InMemoryIdempotencyStore({
+  ttlMs: config.genesys.outboundDedupeTtlSeconds * 1000,
+});
 
 const app = express();
 app.disable("x-powered-by");
@@ -54,19 +51,6 @@ function logError(requestId, message, error, extra = {}) {
       ...extra,
     }),
   );
-}
-
-function serializeMessage(direction, source, payload) {
-  return {
-    id: payload.messageId || payload.id || crypto.randomUUID(),
-    direction,
-    source,
-    timestamp: payload.timestamp || new Date().toISOString(),
-    text: payload.text || null,
-    mediaUrl: payload.mediaUrl || null,
-    metadata: payload.metadata || {},
-    raw: payload.raw || undefined,
-  };
 }
 
 async function sendInboundToGenesys(inbound) {
@@ -110,27 +94,6 @@ async function sendInboundToGenesys(inbound) {
   }
 }
 
-function buildSinchDedupeKey({ callback, fallbackNonce }) {
-  if (callback.kind === "message_delivery") {
-    return [
-      "sinch",
-      "message_delivery",
-      callback.sinchMessageId || callback.messageId || "unknown",
-      callback.status || "unknown",
-      callback.timestamp || "no-timestamp",
-    ].join(":");
-  }
-
-  return [
-    "sinch",
-    callback.kind || "unknown",
-    callback.messageId ||
-      callback.sinchMessageId ||
-      fallbackNonce ||
-      crypto.randomUUID(),
-  ].join(":");
-}
-
 function normalizeGenesysMessageId(value) {
   if (!value || typeof value !== "string") {
     return null;
@@ -139,19 +102,20 @@ function normalizeGenesysMessageId(value) {
   return value.replace(/:(text|media)$/i, "");
 }
 
-function mapSinchDeliveryStatusToGenesys(status) {
-  if (!status) {
-    return "Delivered";
+async function dispatchGenesysOutboundMessage(outbound) {
+  const requests = buildSinchRequestsFromGenesysMessage({
+    appId: config.sinch.appId,
+    genesysMessage: outbound,
+  });
+
+  const results = [];
+  for (const request of requests) {
+    results.push(await sinchClient.sendMessage(request));
   }
 
-  const normalized = String(status).toUpperCase();
-
-  if (normalized === "FAILED") {
-    return "Failed";
-  }
-
-  // READ, DELIVERED, SENT, etc. -> Delivered côté Genesys
-  return "Delivered";
+  return {
+    dispatchedMessages: results,
+  };
 }
 
 app.get("/health", (_req, res) => {
@@ -215,7 +179,8 @@ app.post("/webhooks/sinch", async (req, res) => {
       console.log(
         "Step 3 : sendInboundToGenesys - Push to Genesys Cloud with payload",
       );
-      await sendInboundToGenesys(callback);
+
+      await sendInboundToGenesys(nestedPayload);
 
       return res.status(200).json({
         requestId,
@@ -229,8 +194,8 @@ app.post("/webhooks/sinch", async (req, res) => {
     });
   } catch (error) {
     logError(requestId, "Failed to process Sinch webhook.", error, {
-      callbackKind: callback.kind,
-      dedupeKey,
+      callbackKind: nestedPayload?.kind,
+      callbackMessageId: nestedPayload?.messageId,
     });
 
     if (error instanceof HttpIntegrationError) {
@@ -249,9 +214,9 @@ app.post("/webhooks/sinch", async (req, res) => {
   }
 });
 
-// Endpoint to receive outbound messages from Genesys Cloud and forward them to Sinch Conversation API
 app.post("/webhooks/genesys/outbound", async (req, res) => {
   const requestId = req.header("x-request-id") || crypto.randomUUID();
+
   const signatureValid = verifyGenesysSignature({
     rawBody: req.rawBody || "",
     headerValue: req.header("x-hub-signature-256"),
@@ -271,36 +236,65 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
     });
   }
 
-  console.log("Genesys outbound webhook signature verified successfully.");
+  const payloadType = String(req.body?.type || "").toLowerCase();
+  const payloadDirection = String(req.body?.direction || "").toLowerCase();
 
-  if (req.body?.type === "Receipt") {
-    console.log("Received Receipt from Genesys, ignoring!!!");
+  if (payloadType === "receipt") {
+    return res.status(200).json({
+      requestId,
+      status: "ignored_receipt",
+    });
+  }
+
+  if (payloadDirection && payloadDirection !== "outbound") {
+    return res.status(200).json({
+      requestId,
+      status: "ignored_non_outbound",
+    });
+  }
+
+  const outbound = parseGenesysOutboundMessage(req.body);
+  if (!outbound) {
     return res.status(200).json({
       requestId,
       status: "ignored",
     });
   }
 
-  const outbound = parseGenesysOutboundMessage(req.body);
+  if (!outbound.text && outbound.quickReplies.length === 0) {
+    return res.status(200).json({
+      requestId,
+      status: "ignored_empty_message",
+    });
+  }
+
+  const dedupeKey = normalizeGenesysMessageId(outbound.id);
 
   try {
-    const requests = buildSinchRequestsFromGenesysMessage({
-      appId: config.sinch.appId,
-      genesysMessage: outbound,
-    });
-
-    const results = [];
-    for (const request of requests) {
-      results.push(await sinchClient.sendMessage(request));
-    }
+    const execution = dedupeKey
+      ? await genesysOutboundIdempotency.run(dedupeKey, async () =>
+          dispatchGenesysOutboundMessage(outbound),
+        )
+      : {
+          key: null,
+          duplicate: false,
+          state: "not_tracked",
+          value: await dispatchGenesysOutboundMessage(outbound),
+        };
 
     return res.status(200).json({
       requestId,
-      status: "accepted",
-      dispatchedMessages: results,
+      status: execution.duplicate ? "duplicate_ignored" : "accepted",
+      dedupeKey: execution.key || undefined,
+      dedupeState: execution.duplicate ? execution.state : undefined,
+      dispatchedMessages: execution.value.dispatchedMessages,
     });
   } catch (error) {
-    logError(requestId, "Failed to process Genesys outbound webhook.", error);
+    logError(requestId, "Failed to process Genesys outbound webhook.", error, {
+      dedupeKey,
+      outboundMessageId: outbound.id,
+    });
+
     if (error instanceof HttpIntegrationError) {
       return res.status(502).json({
         requestId,
@@ -324,6 +318,7 @@ function start() {
   app.listen(config.port, () => {
     logInfo("startup", `${config.serviceName} listening`, {
       port: config.port,
+      genesysOutboundDedupeTtlSeconds: config.genesys.outboundDedupeTtlSeconds,
     });
   });
 }
