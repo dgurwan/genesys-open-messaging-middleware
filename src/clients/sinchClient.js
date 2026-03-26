@@ -25,6 +25,14 @@ export class SinchClient {
     );
   }
 
+  serializeRequestBody(body) {
+    if (body === undefined || body === null) {
+      return undefined;
+    }
+
+    return typeof body === "string" ? body : JSON.stringify(body);
+  }
+
   async request(path, { method = "GET", body } = {}) {
     console.log(
       "SinchClient => mirror enabled ? ",
@@ -43,6 +51,7 @@ export class SinchClient {
       await this.mirrorRequest({ method, body });
     }
 
+    const serializedBody = this.serializeRequestBody(body);
     const token = await this.getAccessToken();
     const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
       method,
@@ -50,7 +59,7 @@ export class SinchClient {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: serializedBody,
     });
 
     const responseBody = await this.readResponseBody(response);
@@ -78,7 +87,7 @@ export class SinchClient {
         headers: {
           "Content-Type": "application/json",
         },
-        body: body ? JSON.stringify(body) : undefined,
+        body: this.serializeRequestBody(body),
       });
 
       const mirrorResponseBody = await this.readResponseBody(mirrorResponse);

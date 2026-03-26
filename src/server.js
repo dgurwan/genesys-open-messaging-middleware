@@ -102,12 +102,7 @@ function normalizeGenesysMessageId(value) {
   return value.replace(/:(text|media)$/i, "");
 }
 
-async function dispatchGenesysOutboundMessage(outbound) {
-  const requests = buildSinchRequestsFromGenesysMessage({
-    appId: config.sinch.appId,
-    genesysMessage: outbound,
-  });
-
+async function dispatchSinchRequests(requests) {
   const results = [];
   for (const request of requests) {
     results.push(await sinchClient.sendMessage(request));
@@ -116,6 +111,15 @@ async function dispatchGenesysOutboundMessage(outbound) {
   return {
     dispatchedMessages: results,
   };
+}
+
+async function dispatchGenesysOutboundMessage(outbound) {
+  const requests = buildSinchRequestsFromGenesysMessage({
+    appId: config.sinch.appId,
+    genesysMessage: outbound,
+  });
+
+  return dispatchSinchRequests(requests);
 }
 
 app.get("/health", (_req, res) => {
@@ -259,7 +263,9 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
     });
   }
 
-  const outbound = parseGenesysOutboundMessage(req.body);
+  const outbound = parseGenesysOutboundMessage(req.body, {
+    defaultSinchAppId: config.sinch.appId,
+  });
   if (!outbound) {
     return res.status(200).json({
       requestId,
@@ -268,6 +274,7 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
   }
 
   if (
+    outbound.kind !== "sinch_direct" &&
     !outbound.text &&
     outbound.quickReplies.length === 0 &&
     outbound.carouselCards.length === 0

@@ -2,6 +2,10 @@ function asNonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function truncate(value, maxLength) {
   const text = asNonEmptyString(value);
   if (!text) {
@@ -214,7 +218,39 @@ function extractCarouselCards(payload) {
   return cards;
 }
 
-export function parseGenesysOutboundMessage(payload) {
+export function parseGenesysOutboundMessage(payload, { defaultSinchAppId } = {}) {
+  const directRequests = extractDirectSinchRequests(payload, {
+    defaultAppId: defaultSinchAppId,
+  });
+
+  if (directRequests) {
+    const directCorrelationId =
+      directRequests
+        .map((request) => asNonEmptyString(request?.correlation_id))
+        .find(Boolean) || null;
+
+    console.log(
+      "parseGenesysOutboundMessage : Detected direct Sinch request payload:",
+      JSON.stringify({
+        correlationId: directCorrelationId,
+        requestCount: directRequests.length,
+      }),
+    );
+
+    return {
+      kind: "sinch_direct",
+      id: directCorrelationId,
+      customerId: null,
+      agentId: null,
+      text: null,
+      quickReplies: [],
+      carouselCards: [],
+      timestamp: new Date().toISOString(),
+      directRequests,
+      raw: payload,
+    };
+  }
+
   const id =
     asNonEmptyString(payload?.id) ||
     asNonEmptyString(payload?.channel?.messageId);
@@ -288,10 +324,71 @@ function buildRecipient({ appId, customerId }) {
   };
 }
 
+function normalizeDirectSinchRequest(payload, { defaultAppId } = {}) {
+  if (!isPlainObject(payload)) {
+    return null;
+  }
+
+  if (!isPlainObject(payload.recipient) || !isPlainObject(payload.message)) {
+    return null;
+  }
+
+  const appId = asNonEmptyString(payload.app_id) || defaultAppId || null;
+  if (!appId) {
+    return null;
+  }
+
+  return {
+    ...payload,
+    app_id: appId,
+  };
+}
+
+export function extractDirectSinchRequests(
+  payload,
+  { defaultAppId } = {},
+) {
+  let candidate = payload;
+
+  if (typeof candidate === "string") {
+    const raw = candidate.trim();
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      candidate = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  const directCandidates = Array.isArray(candidate)
+    ? candidate
+    : Array.isArray(candidate?.requests)
+      ? candidate.requests
+      : [candidate];
+
+  if (!Array.isArray(directCandidates) || directCandidates.length === 0) {
+    return null;
+  }
+
+  const requests = directCandidates.map((request) =>
+    normalizeDirectSinchRequest(request, { defaultAppId }),
+  );
+
+  return requests.every(Boolean) ? requests : null;
+}
+
+
 export function buildSinchRequestsFromGenesysMessage({
   appId,
   genesysMessage,
 }) {
+  if (genesysMessage.kind === "sinch_direct") {
+    return genesysMessage.directRequests;
+  }
+
   const customerId = genesysMessage.customerId;
   if (!customerId) {
     throw new Error(
