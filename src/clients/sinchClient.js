@@ -28,13 +28,13 @@ export class SinchClient {
   async request(path, { method = "GET", body } = {}) {
     console.log(
       "SinchClient => mirror enabled ? ",
-      this.config.requestMirrorUrl ? "Yes" : "No",
+      this.config.sinch.requestMirrorUrl ? "Yes" : "No",
     );
 
-    if (this.config.requestMirrorUrl) {
+    if (this.config.sinch.requestMirrorUrl) {
       console.log(
         "SinchClient => Mirroring request to:",
-        this.config.requestMirrorUrl,
+        this.config.sinch.requestMirrorUrl,
         "Method:",
         method,
         "Body:",
