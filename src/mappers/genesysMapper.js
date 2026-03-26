@@ -76,21 +76,3 @@ export function buildGenesysInboundPayload({
 
   return payload;
 }
-
-export function buildGenesysReceiptPayload({
-  messageId,
-  status,
-  timestamp,
-  metadata = {},
-}) {
-  return {
-    messageId,
-    status,
-    channel: {
-      time: timestamp,
-      metadata: {
-        customAttributes: sanitizeCustomAttributes(metadata),
-      },
-    },
-  };
-}

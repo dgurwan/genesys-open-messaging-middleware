@@ -128,7 +128,7 @@ app.get("/health", (_req, res) => {
 
 app.post("/webhooks/sinch", async (req, res) => {
   console.log(
-    "Step 1 : /webhooks/sinch - Received from Sinch following payload => ",
+    "Step 1 : server.webhook.sinch - Received from Sinch following payload => ",
     JSON.stringify(req.body, null, 4),
   );
 
@@ -156,7 +156,7 @@ app.post("/webhooks/sinch", async (req, res) => {
   try {
     nestedPayload = parseSinchCallback(req.body);
     console.log(
-      "Step 2 : /webhooks/sinch - Parsed Sinch callback payload => ",
+      "Step 2 : server.webhook.sinch - Parsed Sinch callback payload => ",
       JSON.stringify(nestedPayload, null, 4),
     );
   } catch (error) {
@@ -222,7 +222,7 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
   });
 
   console.log(
-    "Received from Genesys from /webhooks/genesys/outbound with body:",
+    "Step4 : server.webhook.genesys.outbound - Received from Genesys from with body:",
     JSON.stringify(req.body, null, 4),
   );
 
@@ -238,6 +238,10 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
   const payloadDirection = String(req.body?.direction || "").toLowerCase();
 
   if (payloadType === "receipt") {
+    console.log(
+      "Step4 : server.webhook.genesys.outbound - Received a receipt event => ignoring.",
+      { requestId, payloadType, payloadDirection },
+    );
     return res.status(200).json({
       requestId,
       status: "ignored_receipt",
@@ -245,6 +249,10 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
   }
 
   if (payloadDirection && payloadDirection !== "outbound") {
+    console.log(
+      "Step4 : server.webhook.genesys.outbound - Received a non-outbound event => ignoring.",
+      { requestId, payloadType, payloadDirection },
+    );
     return res.status(200).json({
       requestId,
       status: "ignored_non_outbound",
@@ -253,6 +261,10 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
 
   const outbound = parseGenesysOutboundMessage(req.body);
   if (!outbound) {
+    console.log(
+      "Step4 : server.webhook.genesys.outbound - Failed to parse Genesys outbound message => ignoring.",
+      { requestId },
+    );
     return res.status(200).json({
       requestId,
       status: "ignored",
@@ -260,6 +272,10 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
   }
 
   if (!outbound.text && outbound.quickReplies.length === 0) {
+    console.log(
+      "Step4 : server.webhook.genesys.outbound - Parsed outbound message does not contain text or quick replies => ignoring.",
+      { requestId, messageId: outbound.id },
+    );
     return res.status(200).json({
       requestId,
       status: "ignored_empty_message",

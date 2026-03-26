@@ -65,10 +65,6 @@ function extractQuickReplies(payload) {
 }
 
 export function parseGenesysOutboundMessage(payload) {
-  if (String(payload?.type || "").toLowerCase() === "receipt") {
-    return null;
-  }
-
   const id =
     asNonEmptyString(payload?.id) ||
     asNonEmptyString(payload?.channel?.messageId);

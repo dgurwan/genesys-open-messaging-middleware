@@ -41,12 +41,11 @@ export class GenesysClient {
 
   async request(path, { method = "GET", body } = {}) {
     console.log(
-      "Step 4 : GenesysClient.request - Making API request to Genesys Cloud with path:",
+      "Step 3 : GenesysClient.request - Making API request to Genesys Cloud with path:",
       path,
-    );
-    console.log("Step 4 : GenesysClient.request - Request method:", method);
-    console.log(
-      "Step 4 : GenesysClient.request - Request body:",
+      "Step 3 : GenesysClient.request - Request method:",
+      method,
+      "Step 3 : GenesysClient.request - Request body:",
       JSON.stringify(body),
     );
 
