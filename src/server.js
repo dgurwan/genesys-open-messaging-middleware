@@ -154,8 +154,11 @@ app.post("/webhooks/sinch", async (req, res) => {
   // format the callback data in a way that is easier to work with for the rest of the app and to abstract away any Sinch-specific details
   let nestedPayload;
   try {
-    console.log("Step 2 : /webhooks/sinch - Parsing Sinch callback payload");
     nestedPayload = parseSinchCallback(req.body);
+    console.log(
+      "Step 2 : /webhooks/sinch - Parsed Sinch callback payload => ",
+      JSON.stringify(nestedPayload, null, 4),
+    );
   } catch (error) {
     logError(requestId, "Failed to parse Sinch callback.", error);
     return res.status(400).json({
@@ -174,11 +177,6 @@ app.post("/webhooks/sinch", async (req, res) => {
           details: "Sinch callback does not contain an RCS identity.",
         });
       }
-
-      // if the message is valid and contains all the necessary information, map it to the Genesys Cloud format and send it to Genesys Cloud as an inbound message
-      console.log(
-        "Step 3 : sendInboundToGenesys - Push to Genesys Cloud with payload",
-      );
 
       await sendInboundToGenesys(nestedPayload);
 

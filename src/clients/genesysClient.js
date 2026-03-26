@@ -14,6 +14,12 @@ export class GenesysClient {
     const query = this.config.prefetchConversationId
       ? "?prefetchConversationId=true"
       : "";
+
+    console.log(
+      "GenesysClient => Sending inbound message with payload:",
+      JSON.stringify(messagePayload),
+    );
+
     return this.request(
       `/api/v2/conversations/messages/${encodeURIComponent(this.config.integrationId)}/inbound/open/message${query}`,
       {
@@ -34,6 +40,16 @@ export class GenesysClient {
   }
 
   async request(path, { method = "GET", body } = {}) {
+    console.log(
+      "Step 4 : GenesysClient.request - Making API request to Genesys Cloud with path:",
+      path,
+    );
+    console.log("Step 4 : GenesysClient.request - Request method:", method);
+    console.log(
+      "Step 4 : GenesysClient.request - Request body:",
+      JSON.stringify(body),
+    );
+
     const token = await this.getAccessToken();
     const response = await fetch(`${this.config.apiBaseUrl}${path}`, {
       method,
@@ -51,6 +67,15 @@ export class GenesysClient {
         body: responseBody,
       });
     }
+
+    console.log(
+      "GenesysClient => Response status:",
+      JSON.stringify(response.status),
+    );
+    console.log(
+      "GenesysClient => Response body:",
+      JSON.stringify(responseBody),
+    );
 
     return responseBody;
   }
