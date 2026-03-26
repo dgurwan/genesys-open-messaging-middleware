@@ -62,6 +62,7 @@ export function loadConfig() {
   const genesysLoginBaseUrl = normalizeUrl(process.env.GENESYS_CLOUD_LOGIN_BASE_URL || derivedGenesys?.loginBaseUrl);
   const genesysApiBaseUrl = normalizeUrl(process.env.GENESYS_CLOUD_API_BASE_URL || derivedGenesys?.apiBaseUrl);
   const sinchBaseUrl = normalizeUrl(process.env.SINCH_CONVERSATION_BASE_URL || deriveSinchBaseUrl(process.env.SINCH_REGION));
+  const sinchRequestMirrorUrl = normalizeUrl(process.env.SINCH_REQUEST_MIRROR_URL || '');
 
   const config = {
     port: Number(process.env.PORT || 3000),
@@ -87,6 +88,7 @@ export function loadConfig() {
       keySecret: getRequired('SINCH_KEY_SECRET'),
       webhookSecret: getRequired('SINCH_WEBHOOK_SECRET'),
       signatureMaxSkewSeconds: Number(process.env.SINCH_SIGNATURE_MAX_SKEW_SECONDS || 300),
+      requestMirrorUrl: sinchRequestMirrorUrl || null,
       forceChannel: 'RCS'
     },
     storage: {

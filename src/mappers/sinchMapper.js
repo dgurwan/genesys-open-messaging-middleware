@@ -2,22 +2,103 @@ function asNonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function mapQuickReplyChoice(choice, index) {
-  const text =
-    asNonEmptyString(choice?.title) ||
-    asNonEmptyString(choice?.text) ||
-    asNonEmptyString(choice?.label) ||
-    `Choice ${index + 1}`;
-  const url =
+function truncate(value, maxLength) {
+  const text = asNonEmptyString(value);
+  if (!text) {
+    return null;
+  }
+
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function isAbsoluteUrl(value) {
+  try {
+    const url = new URL(String(value));
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function looksLikeUrl(value) {
+  return isAbsoluteUrl(value);
+}
+
+function hostnameFromUrl(value) {
+  if (!isAbsoluteUrl(value)) {
+    return null;
+  }
+
+  try {
+    return new URL(value).hostname.replace(/^www\./i, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizePhoneNumber(value) {
+  const raw = asNonEmptyString(value);
+  if (!raw) {
+    return null;
+  }
+
+  const normalized = raw.replace(/[^\d+]/g, "");
+  return normalized || null;
+}
+
+function pickChoiceUrl(choice) {
+  return (
     asNonEmptyString(choice?.url) ||
     asNonEmptyString(choice?.uri) ||
-    asNonEmptyString(choice?.link);
+    asNonEmptyString(choice?.link) ||
+    null
+  );
+}
+
+function deriveUrlChoiceTitle(choice, index) {
+  const explicitTitle =
+    asNonEmptyString(choice?.title) ||
+    asNonEmptyString(choice?.label) ||
+    asNonEmptyString(choice?.text);
+
+  if (explicitTitle && !looksLikeUrl(explicitTitle)) {
+    return explicitTitle;
+  }
+
+  return hostnameFromUrl(pickChoiceUrl(choice)) || `Open link ${index + 1}`;
+}
+
+function mapQuickReplyChoice(choice, index) {
+  const url = pickChoiceUrl(choice);
 
   if (url) {
     return {
       url_message: {
-        title: text,
+        title: truncate(deriveUrlChoiceTitle(choice, index), 25),
         url,
+      },
+    };
+  }
+
+  const text =
+    truncate(
+      asNonEmptyString(choice?.title) ||
+        asNonEmptyString(choice?.text) ||
+        asNonEmptyString(choice?.label) ||
+        `Choice ${index + 1}`,
+      25,
+    ) || `Choice ${index + 1}`;
+
+  const phoneNumber =
+    normalizePhoneNumber(choice?.phoneNumber) ||
+    normalizePhoneNumber(choice?.phone_number) ||
+    normalizePhoneNumber(choice?.phone);
+
+  if (phoneNumber) {
+    return {
+      call_message: {
+        title: text,
+        phone_number: phoneNumber,
       },
     };
   }
@@ -35,26 +116,23 @@ function mapQuickReplyChoice(choice, index) {
   };
 }
 
+function mapGenesysCardActionToChoice(action, index) {
+  if (!action || typeof action !== "object") {
+    return null;
+  }
+
+  return mapQuickReplyChoice(action, index);
+}
+
 function extractQuickReplies(payload) {
-  /* structure examples to consider:
-  {
-    "text_message": {
-    "text": "Confirm"
-    }
-  }*/
   if (Array.isArray(payload?.content)) {
     const nested = [];
 
     for (const item of payload.content) {
-      if (item?.quickReply?.text) {
+      if (item?.quickReply && typeof item.quickReply === "object") {
         nested.push(item.quickReply);
       }
     }
-
-    console.log(
-      "extractQuickReplies : Extracted quick replies from nested content:",
-      JSON.stringify(nested),
-    );
 
     if (nested.length > 0) {
       return nested;
@@ -62,6 +140,78 @@ function extractQuickReplies(payload) {
   }
 
   return [];
+}
+
+function mapGenesysCarouselCard(card) {
+  if (!card || typeof card !== "object") {
+    return null;
+  }
+
+  const mapped = {};
+
+  const title = truncate(card?.title || card?.name, 200);
+  if (title) {
+    mapped.title = title;
+  }
+
+  const description = truncate(card?.description || card?.text, 2000);
+  if (description) {
+    mapped.description = description;
+  }
+
+  const mediaUrl =
+    asNonEmptyString(card?.image) ||
+    asNonEmptyString(card?.imageUrl) ||
+    asNonEmptyString(card?.mediaUrl) ||
+    asNonEmptyString(card?.media?.url) ||
+    null;
+
+  if (mediaUrl && isAbsoluteUrl(mediaUrl)) {
+    mapped.media_message = {
+      url: mediaUrl,
+    };
+  }
+
+  const rawActions = Array.isArray(card?.actions)
+    ? card.actions
+    : Array.isArray(card?.buttons)
+      ? card.buttons
+      : [];
+
+  const choices = rawActions
+    .map(mapGenesysCardActionToChoice)
+    .filter(Boolean)
+    .slice(0, 4);
+
+  if (choices.length > 0) {
+    mapped.choices = choices;
+  }
+
+  return Object.keys(mapped).length > 0 ? mapped : null;
+}
+
+function extractCarouselCards(payload) {
+  if (!Array.isArray(payload?.content)) {
+    return [];
+  }
+
+  const cards = [];
+
+  for (const item of payload.content) {
+    if (String(item?.contentType || "").toLowerCase() !== "carousel") {
+      continue;
+    }
+
+    const rawCards = Array.isArray(item?.carousel?.cards) ? item.carousel.cards : [];
+    for (const rawCard of rawCards) {
+      const mapped = mapGenesysCarouselCard(rawCard);
+      if (mapped) {
+        cards.push(mapped);
+      }
+    }
+  }
+
+  return cards;
 }
 
 export function parseGenesysOutboundMessage(payload) {
@@ -90,6 +240,7 @@ export function parseGenesysOutboundMessage(payload) {
       : null);
 
   const quickReplies = extractQuickReplies(payload).map(mapQuickReplyChoice);
+  const carouselCards = extractCarouselCards(payload);
 
   const time =
     asNonEmptyString(payload?.channel?.time) ||
@@ -98,7 +249,15 @@ export function parseGenesysOutboundMessage(payload) {
 
   console.log(
     "parseGenesysOutboundMessage : Parsed Genesys outbound message:",
-    JSON.stringify({ id, customerId, agentId, text, quickReplies, time }),
+    JSON.stringify({
+      id,
+      customerId,
+      agentId,
+      text,
+      quickReplies,
+      carouselCards,
+      time,
+    }),
   );
 
   return {
@@ -107,6 +266,7 @@ export function parseGenesysOutboundMessage(payload) {
     agentId,
     text,
     quickReplies,
+    carouselCards,
     timestamp: time,
     raw: payload,
   };
@@ -142,6 +302,38 @@ export function buildSinchRequestsFromGenesysMessage({
   const base = buildRecipient({ appId, customerId });
   const correlationBase = genesysMessage.id || `genesys-${Date.now()}`;
   const requests = [];
+
+  if (genesysMessage.carouselCards.length > 0) {
+    if (genesysMessage.text) {
+      requests.push({
+        ...base,
+        correlation_id: `${correlationBase}:text`,
+        message: {
+          text_message: {
+            text: genesysMessage.text,
+          },
+        },
+      });
+    }
+
+    const carouselMessage = {
+      cards: genesysMessage.carouselCards.slice(0, 10),
+    };
+
+    if (genesysMessage.quickReplies.length > 0) {
+      carouselMessage.choices = genesysMessage.quickReplies.slice(0, 3);
+    }
+
+    requests.push({
+      ...base,
+      correlation_id: `${correlationBase}:carousel`,
+      message: {
+        carousel_message: carouselMessage,
+      },
+    });
+
+    return requests;
+  }
 
   if (genesysMessage.quickReplies.length > 0) {
     requests.push({

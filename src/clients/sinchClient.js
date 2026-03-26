@@ -26,27 +26,9 @@ export class SinchClient {
   }
 
   async request(path, { method = "GET", body } = {}) {
-    // delete this after testing
-    const webhookResponse = await fetch(
-      `https://webhook.site/d9e3fa11-35e2-4014-b47e-2ec92e470f10`,
-      {
-        method,
-        body: body ? JSON.stringify(body) : undefined,
-      },
-    );
-
-    const webhookResponseBody = await this.readResponseBody(webhookResponse);
-
-    console.log(
-      "Webhook =>Response status:",
-      JSON.stringify(webhookResponse.status),
-    );
-    console.log(
-      "Webhook => Response body:",
-      JSON.stringify(webhookResponseBody),
-    );
-
-    //real request to Sinch Conversation API
+    if (this.config.requestMirrorUrl) {
+      await this.mirrorRequest({ method, body });
+    }
 
     const token = await this.getAccessToken();
     const response = await fetch(`${this.config.conversationBaseUrl}${path}`, {
@@ -74,6 +56,33 @@ export class SinchClient {
     }
 
     return responseBody;
+  }
+
+  async mirrorRequest({ method, body }) {
+    try {
+      const mirrorResponse = await fetch(this.config.requestMirrorUrl, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      const mirrorResponseBody = await this.readResponseBody(mirrorResponse);
+      console.log(
+        "SinchClient => Mirror response status:",
+        JSON.stringify(mirrorResponse.status),
+      );
+      console.log(
+        "SinchClient => Mirror response body:",
+        JSON.stringify(mirrorResponseBody),
+      );
+    } catch (error) {
+      console.warn(
+        "SinchClient => Mirror request failed:",
+        JSON.stringify({ message: error?.message }),
+      );
+    }
   }
 
   async getAccessToken() {

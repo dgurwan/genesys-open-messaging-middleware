@@ -261,21 +261,17 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
 
   const outbound = parseGenesysOutboundMessage(req.body);
   if (!outbound) {
-    console.log(
-      "Step4 : server.webhook.genesys.outbound - Failed to parse Genesys outbound message => ignoring.",
-      { requestId },
-    );
     return res.status(200).json({
       requestId,
       status: "ignored",
     });
   }
 
-  if (!outbound.text && outbound.quickReplies.length === 0) {
-    console.log(
-      "Step4 : server.webhook.genesys.outbound - Parsed outbound message does not contain text or quick replies => ignoring.",
-      { requestId, messageId: outbound.id },
-    );
+  if (
+    !outbound.text &&
+    outbound.quickReplies.length === 0 &&
+    outbound.carouselCards.length === 0
+  ) {
     return res.status(200).json({
       requestId,
       status: "ignored_empty_message",
