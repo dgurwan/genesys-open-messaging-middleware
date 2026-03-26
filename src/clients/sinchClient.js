@@ -12,7 +12,7 @@ export class SinchClient {
 
   async sendMessage(messagePayload) {
     console.log(
-      "TO SINCH  => Sending message with payload:",
+      "SinchClient => Sending message with payload:",
       JSON.stringify(messagePayload),
     );
 
@@ -26,7 +26,20 @@ export class SinchClient {
   }
 
   async request(path, { method = "GET", body } = {}) {
+    console.log(
+      "SinchClient => mirror enabled ? ",
+      this.config.requestMirrorUrl ? "Yes" : "No",
+    );
+
     if (this.config.requestMirrorUrl) {
+      console.log(
+        "SinchClient => Mirroring request to:",
+        this.config.requestMirrorUrl,
+        "Method:",
+        method,
+        "Body:",
+        JSON.stringify(body),
+      );
       await this.mirrorRequest({ method, body });
     }
 
@@ -43,7 +56,7 @@ export class SinchClient {
     const responseBody = await this.readResponseBody(response);
 
     console.log(
-      "SinchClient =>Response status:",
+      "SinchClient => Response status:",
       JSON.stringify(response.status),
     );
     console.log("SinchClient => Response body:", JSON.stringify(responseBody));
