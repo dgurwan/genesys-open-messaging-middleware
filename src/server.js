@@ -155,7 +155,6 @@ app.post("/webhooks/sinch", async (req, res) => {
     });
   }
 
-  // format the callback data in a way that is easier to work with for the rest of the app and to abstract away any Sinch-specific details
   let nestedPayload;
   try {
     nestedPayload = parseSinchCallback(req.body);

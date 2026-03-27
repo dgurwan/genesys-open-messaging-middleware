@@ -110,6 +110,7 @@ function mapQuickReplyChoice(choice, index) {
   const postback =
     asNonEmptyString(choice?.payload) ||
     asNonEmptyString(choice?.postback_data) ||
+    asNonEmptyString(choice?.postbackData) ||
     text;
 
   return {
@@ -206,7 +207,10 @@ function extractCarouselCards(payload) {
       continue;
     }
 
-    const rawCards = Array.isArray(item?.carousel?.cards) ? item.carousel.cards : [];
+    const rawCards = Array.isArray(item?.carousel?.cards)
+      ? item.carousel.cards
+      : [];
+
     for (const rawCard of rawCards) {
       const mapped = mapGenesysCarouselCard(rawCard);
       if (mapped) {
@@ -218,22 +222,34 @@ function extractCarouselCards(payload) {
   return cards;
 }
 
-function parseJsonString(value) {
-  const text = asNonEmptyString(value);
+function parseJsonString(value, { maxDepth = 3 } = {}) {
+  let text = asNonEmptyString(value);
   if (!text) {
     return null;
   }
 
-  const firstChar = text[0];
-  if (firstChar !== "{" && firstChar !== "[") {
-    return null;
+  for (let depth = 0; depth < maxDepth; depth += 1) {
+    const firstChar = text[0];
+    if (firstChar !== "{" && firstChar !== "[" && firstChar !== '"') {
+      return depth === 0 ? null : text;
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed !== "string") {
+        return parsed;
+      }
+
+      text = parsed.trim();
+      if (!text) {
+        return null;
+      }
+    } catch {
+      return depth === 0 ? null : text;
+    }
   }
 
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function normalizeCardHeight(value) {
@@ -324,7 +340,9 @@ function normalizeConversationPayload(value, { parentKey } = {}) {
   const normalized = {};
   for (const [rawKey, rawValue] of Object.entries(value)) {
     const key = normalizeConversationKey(rawKey);
-    normalized[key] = normalizeConversationPayload(rawValue, { parentKey: key });
+    normalized[key] = normalizeConversationPayload(rawValue, {
+      parentKey: key,
+    });
   }
 
   return normalized;
@@ -356,39 +374,12 @@ function containsStructuredMessageField(value) {
   return Object.keys(value).some((key) => STRUCTURED_MESSAGE_FIELDS.has(key));
 }
 
-function extractStructuredMessageCandidate(value) {
-  let candidate = value;
-
-  if (typeof candidate === "string") {
-    candidate = parseJsonString(candidate);
-  }
-
-  if (!isPlainObject(candidate)) {
+function normalizeStructuredMessage(message) {
+  if (!isPlainObject(message)) {
     return null;
   }
 
-  const normalizedCandidate = normalizeConversationPayload(candidate);
-
-  if (containsStructuredMessageField(normalizedCandidate)) {
-    return normalizedCandidate;
-  }
-
-  if (
-    isPlainObject(normalizedCandidate.message) &&
-    containsStructuredMessageField(normalizedCandidate.message)
-  ) {
-    return normalizedCandidate.message;
-  }
-
-  return null;
-}
-
-function replaceEmbeddedStructuredTextMessage(message) {
   const normalizedMessage = normalizeConversationPayload(message);
-  if (!isPlainObject(normalizedMessage)) {
-    return null;
-  }
-
   const embeddedStructuredMessage = extractStructuredMessageCandidate(
     normalizedMessage?.text_message?.text,
   );
@@ -406,8 +397,35 @@ function replaceEmbeddedStructuredTextMessage(message) {
   };
 }
 
+function extractStructuredMessageCandidate(value) {
+  let candidate = value;
+
+  if (typeof candidate === "string") {
+    candidate = parseJsonString(candidate);
+  }
+
+  if (!isPlainObject(candidate)) {
+    return null;
+  }
+
+  const normalizedCandidate = normalizeConversationPayload(candidate);
+
+  if (containsStructuredMessageField(normalizedCandidate)) {
+    return normalizeStructuredMessage(normalizedCandidate);
+  }
+
+  if (
+    isPlainObject(normalizedCandidate.message) &&
+    containsStructuredMessageField(normalizedCandidate.message)
+  ) {
+    return normalizeStructuredMessage(normalizedCandidate.message);
+  }
+
+  return null;
+}
+
 function normalizeDirectRequestMessage(message) {
-  return replaceEmbeddedStructuredTextMessage(message);
+  return normalizeStructuredMessage(message);
 }
 
 function normalizeDirectSinchRequest(payload, { defaultAppId } = {}) {
@@ -437,10 +455,7 @@ function normalizeDirectSinchRequest(payload, { defaultAppId } = {}) {
   };
 }
 
-export function extractDirectSinchRequests(
-  payload,
-  { defaultAppId } = {},
-) {
+export function extractDirectSinchRequests(payload, { defaultAppId } = {}) {
   let candidate = payload;
 
   if (typeof candidate === "string") {

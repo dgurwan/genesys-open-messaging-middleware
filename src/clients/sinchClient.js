@@ -9,22 +9,34 @@ function asNonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function parseJsonString(value) {
-  const text = asNonEmptyString(value);
+function parseJsonString(value, { maxDepth = 3 } = {}) {
+  let text = asNonEmptyString(value);
   if (!text) {
     return null;
   }
 
-  const firstChar = text[0];
-  if (firstChar !== "{" && firstChar !== "[") {
-    return null;
+  for (let depth = 0; depth < maxDepth; depth += 1) {
+    const firstChar = text[0];
+    if (firstChar !== "{" && firstChar !== "[" && firstChar !== '"') {
+      return depth === 0 ? null : text;
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed !== "string") {
+        return parsed;
+      }
+
+      text = parsed.trim();
+      if (!text) {
+        return null;
+      }
+    } catch {
+      return depth === 0 ? null : text;
+    }
   }
 
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function normalizeCardHeight(value) {
@@ -115,7 +127,9 @@ function normalizeConversationPayload(value, { parentKey } = {}) {
   const normalized = {};
   for (const [rawKey, rawValue] of Object.entries(value)) {
     const key = normalizeConversationKey(rawKey);
-    normalized[key] = normalizeConversationPayload(rawValue, { parentKey: key });
+    normalized[key] = normalizeConversationPayload(rawValue, {
+      parentKey: key,
+    });
   }
 
   return normalized;
@@ -124,9 +138,7 @@ function normalizeConversationPayload(value, { parentKey } = {}) {
 const STRUCTURED_MESSAGE_FIELDS = new Set([
   "agent",
   "calendar_message",
-  "card_message",
   "carousel_message",
-  "channel_specific_message",
   "choice_message",
   "contact_info_message",
   "explicit_channel_message",
@@ -137,6 +149,7 @@ const STRUCTURED_MESSAGE_FIELDS = new Set([
   "share_location_message",
   "template_message",
   "text_message",
+  "card_message",
 ]);
 
 function containsStructuredMessageField(value) {
