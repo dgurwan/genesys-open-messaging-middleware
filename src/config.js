@@ -2,6 +2,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+/**
+ * Parses an environment variable into a boolean value.
+ */
 function parseBoolean(value, defaultValue = false) {
   if (value === undefined || value === null || value === "") {
     return defaultValue;
@@ -12,15 +15,24 @@ function parseBoolean(value, defaultValue = false) {
   );
 }
 
+/**
+ * Parses a positive number and falls back to a default when the value is invalid.
+ */
 function parsePositiveNumber(value, defaultValue) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
 }
 
+/**
+ * Removes trailing slashes from a base URL.
+ */
 function normalizeUrl(url) {
   return url ? url.replace(/\/+$/, "") : "";
 }
 
+/**
+ * Derives the Genesys login and API base URLs from the cloud domain.
+ */
 function deriveGenesysBaseUrls(domain) {
   if (!domain) {
     return null;
@@ -30,6 +42,7 @@ function deriveGenesysBaseUrls(domain) {
     .trim()
     .replace(/^https?:\/\//, "")
     .replace(/\/+$/, "");
+
   if (!cleaned) {
     return null;
   }
@@ -40,6 +53,9 @@ function deriveGenesysBaseUrls(domain) {
   };
 }
 
+/**
+ * Derives the Sinch Conversation API base URL from the configured region.
+ */
 function deriveSinchBaseUrl(region) {
   if (!region) {
     return "";
@@ -53,6 +69,9 @@ function deriveSinchBaseUrl(region) {
   return `https://${cleaned}.conversation.api.sinch.com`;
 }
 
+/**
+ * Reads a required environment variable and throws when it is missing.
+ */
 function getRequired(name) {
   const value = process.env[name];
   if (!value || !String(value).trim()) {
@@ -62,6 +81,9 @@ function getRequired(name) {
   return String(value).trim();
 }
 
+/**
+ * Loads and validates the full runtime configuration used by the service.
+ */
 export function loadConfig() {
   const derivedGenesys = deriveGenesysBaseUrls(
     process.env.GENESYS_CLOUD_DOMAIN,

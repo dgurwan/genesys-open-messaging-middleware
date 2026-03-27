@@ -1,6 +1,9 @@
 import path from "node:path";
 import { sanitizeCustomAttributes } from "../validation.js";
 
+/**
+ * Guesses the content type from the attachment URL extension.
+ */
 function guessContentType(url) {
   const lower = String(url || "").toLowerCase();
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
@@ -14,6 +17,9 @@ function guessContentType(url) {
   return "application/octet-stream";
 }
 
+/**
+ * Builds a filename from the attachment URL.
+ */
 function basenameFromUrl(url) {
   try {
     const pathname = new URL(url).pathname;
@@ -23,6 +29,9 @@ function basenameFromUrl(url) {
   }
 }
 
+/**
+ * Builds the Genesys inbound payload sent to the open messaging integration.
+ */
 export function buildGenesysInboundPayload({
   externalUserId,
   messageId,
@@ -77,6 +86,9 @@ export function buildGenesysInboundPayload({
   return payload;
 }
 
+/**
+ * Builds the Genesys receipt payload used for delivery status updates.
+ */
 export function buildGenesysReceiptPayload({
   messageId,
   status,

@@ -1,11 +1,12 @@
-function asNonEmptyString(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
+import {
+  asNonEmptyString,
+  extractDirectSinchRequests,
+  extractStructuredMessage,
+} from "../utils/sinchPayload.js";
 
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
+/**
+ * Truncates text fields to the maximum size accepted by the downstream channel.
+ */
 function truncate(value, maxLength) {
   const text = asNonEmptyString(value);
   if (!text) {
@@ -15,6 +16,9 @@ function truncate(value, maxLength) {
   return text.length > maxLength ? text.slice(0, maxLength) : text;
 }
 
+/**
+ * Returns true when the value is a valid absolute HTTP(S) URL.
+ */
 function isAbsoluteUrl(value) {
   try {
     const url = new URL(String(value));
@@ -24,10 +28,16 @@ function isAbsoluteUrl(value) {
   }
 }
 
+/**
+ * Reuses the URL validation helper to express the intent more clearly.
+ */
 function looksLikeUrl(value) {
   return isAbsoluteUrl(value);
 }
 
+/**
+ * Extracts a readable hostname from a URL to build a fallback button title.
+ */
 function hostnameFromUrl(value) {
   if (!isAbsoluteUrl(value)) {
     return null;
@@ -40,6 +50,9 @@ function hostnameFromUrl(value) {
   }
 }
 
+/**
+ * Normalizes a phone number to digits and an optional leading plus sign.
+ */
 function normalizePhoneNumber(value) {
   const raw = asNonEmptyString(value);
   if (!raw) {
@@ -50,6 +63,9 @@ function normalizePhoneNumber(value) {
   return normalized || null;
 }
 
+/**
+ * Finds a URL on a choice object regardless of the source field name.
+ */
 function pickChoiceUrl(choice) {
   return (
     asNonEmptyString(choice?.url) ||
@@ -59,6 +75,9 @@ function pickChoiceUrl(choice) {
   );
 }
 
+/**
+ * Builds a safe button title when the source action only contains a URL.
+ */
 function deriveUrlChoiceTitle(choice, index) {
   const explicitTitle =
     asNonEmptyString(choice?.title) ||
@@ -72,9 +91,11 @@ function deriveUrlChoiceTitle(choice, index) {
   return hostnameFromUrl(pickChoiceUrl(choice)) || `Open link ${index + 1}`;
 }
 
+/**
+ * Converts a Genesys quick reply action into the Sinch choice format.
+ */
 function mapQuickReplyChoice(choice, index) {
   const url = pickChoiceUrl(choice);
-
   if (url) {
     return {
       url_message: {
@@ -107,20 +128,20 @@ function mapQuickReplyChoice(choice, index) {
     };
   }
 
-  const postback =
-    asNonEmptyString(choice?.payload) ||
-    asNonEmptyString(choice?.postback_data) ||
-    asNonEmptyString(choice?.postbackData) ||
-    text;
-
   return {
     text_message: {
       text,
     },
-    postback_data: postback,
+    postback_data:
+      asNonEmptyString(choice?.payload) ||
+      asNonEmptyString(choice?.postback_data) ||
+      text,
   };
 }
 
+/**
+ * Safely maps a Genesys card action when the action object exists.
+ */
 function mapGenesysCardActionToChoice(action, index) {
   if (!action || typeof action !== "object") {
     return null;
@@ -129,24 +150,22 @@ function mapGenesysCardActionToChoice(action, index) {
   return mapQuickReplyChoice(action, index);
 }
 
+/**
+ * Extracts quick reply definitions from the Genesys content array.
+ */
 function extractQuickReplies(payload) {
-  if (Array.isArray(payload?.content)) {
-    const nested = [];
-
-    for (const item of payload.content) {
-      if (item?.quickReply && typeof item.quickReply === "object") {
-        nested.push(item.quickReply);
-      }
-    }
-
-    if (nested.length > 0) {
-      return nested;
-    }
+  if (!Array.isArray(payload?.content)) {
+    return [];
   }
 
-  return [];
+  return payload.content
+    .map((item) => item?.quickReply)
+    .filter((item) => item && typeof item === "object");
 }
 
+/**
+ * Converts one Genesys carousel card into the Sinch carousel card shape.
+ */
 function mapGenesysCarouselCard(card) {
   if (!card || typeof card !== "object") {
     return null;
@@ -195,6 +214,9 @@ function mapGenesysCarouselCard(card) {
   return Object.keys(mapped).length > 0 ? mapped : null;
 }
 
+/**
+ * Extracts and maps all carousel cards contained in the Genesys payload.
+ */
 function extractCarouselCards(payload) {
   if (!Array.isArray(payload?.content)) {
     return [];
@@ -222,268 +244,9 @@ function extractCarouselCards(payload) {
   return cards;
 }
 
-function parseJsonString(value, { maxDepth = 3 } = {}) {
-  let text = asNonEmptyString(value);
-  if (!text) {
-    return null;
-  }
-
-  for (let depth = 0; depth < maxDepth; depth += 1) {
-    const firstChar = text[0];
-    if (firstChar !== "{" && firstChar !== "[" && firstChar !== '"') {
-      return depth === 0 ? null : text;
-    }
-
-    try {
-      const parsed = JSON.parse(text);
-      if (typeof parsed !== "string") {
-        return parsed;
-      }
-
-      text = parsed.trim();
-      if (!text) {
-        return null;
-      }
-    } catch {
-      return depth === 0 ? null : text;
-    }
-  }
-
-  return null;
-}
-
-function normalizeCardHeight(value) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return (
-      {
-        0: "UNSPECIFIED_HEIGHT",
-        1: "SHORT",
-        2: "MEDIUM",
-        3: "TALL",
-      }[value] || value
-    );
-  }
-
-  const text = asNonEmptyString(value);
-  if (!text) {
-    return value;
-  }
-
-  const normalized = text.toUpperCase();
-  const enumMap = {
-    UNSPECIFIED: "UNSPECIFIED_HEIGHT",
-    UNSPECIFIED_HEIGHT: "UNSPECIFIED_HEIGHT",
-    SHORT: "SHORT",
-    MEDIUM: "MEDIUM",
-    TALL: "TALL",
-  };
-
-  return enumMap[normalized] || value;
-}
-
-const CAMEL_TO_SNAKE_KEY_MAP = {
-  appId: "app_id",
-  callbackUrl: "callback_url",
-  calendarMessage: "calendar_message",
-  cardMessage: "card_message",
-  carouselMessage: "carousel_message",
-  channelIdentities: "channel_identities",
-  channelPriorityOrder: "channel_priority_order",
-  channelSpecificMessage: "channel_specific_message",
-  choiceMessage: "choice_message",
-  contactId: "contact_id",
-  contactInfoMessage: "contact_info_message",
-  correlationId: "correlation_id",
-  eventDescription: "event_description",
-  eventEnd: "event_end",
-  eventStart: "event_start",
-  eventTitle: "event_title",
-  explicitChannelMessage: "explicit_channel_message",
-  explicitChannelOmniMessage: "explicit_channel_omni_message",
-  fallbackUrl: "fallback_url",
-  filenameOverride: "filename_override",
-  identifiedBy: "identified_by",
-  listMessage: "list_message",
-  locationMessage: "location_message",
-  mediaMessage: "media_message",
-  messageProperties: "message_properties",
-  messageType: "message_type",
-  phoneNumber: "phone_number",
-  postbackData: "postback_data",
-  shareLocationMessage: "share_location_message",
-  templateMessage: "template_message",
-  textMessage: "text_message",
-  thumbnailUrl: "thumbnail_url",
-  urlMessage: "url_message",
-  callMessage: "call_message",
-};
-
-function normalizeConversationKey(key) {
-  return CAMEL_TO_SNAKE_KEY_MAP[key] || key;
-}
-
-function normalizeConversationPayload(value, { parentKey } = {}) {
-  if (Array.isArray(value)) {
-    return value.map((item) =>
-      normalizeConversationPayload(item, { parentKey }),
-    );
-  }
-
-  if (!isPlainObject(value)) {
-    if (parentKey === "height") {
-      return normalizeCardHeight(value);
-    }
-
-    return value;
-  }
-
-  const normalized = {};
-  for (const [rawKey, rawValue] of Object.entries(value)) {
-    const key = normalizeConversationKey(rawKey);
-    normalized[key] = normalizeConversationPayload(rawValue, {
-      parentKey: key,
-    });
-  }
-
-  return normalized;
-}
-
-const STRUCTURED_MESSAGE_FIELDS = new Set([
-  "agent",
-  "calendar_message",
-  "card_message",
-  "carousel_message",
-  "channel_specific_message",
-  "choice_message",
-  "contact_info_message",
-  "explicit_channel_message",
-  "explicit_channel_omni_message",
-  "list_message",
-  "location_message",
-  "media_message",
-  "share_location_message",
-  "template_message",
-  "text_message",
-]);
-
-function containsStructuredMessageField(value) {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-
-  return Object.keys(value).some((key) => STRUCTURED_MESSAGE_FIELDS.has(key));
-}
-
-function normalizeStructuredMessage(message) {
-  if (!isPlainObject(message)) {
-    return null;
-  }
-
-  const normalizedMessage = normalizeConversationPayload(message);
-  const embeddedStructuredMessage = extractStructuredMessageCandidate(
-    normalizedMessage?.text_message?.text,
-  );
-
-  if (!embeddedStructuredMessage) {
-    return normalizedMessage;
-  }
-
-  const nextMessage = { ...normalizedMessage };
-  delete nextMessage.text_message;
-
-  return {
-    ...nextMessage,
-    ...embeddedStructuredMessage,
-  };
-}
-
-function extractStructuredMessageCandidate(value) {
-  let candidate = value;
-
-  if (typeof candidate === "string") {
-    candidate = parseJsonString(candidate);
-  }
-
-  if (!isPlainObject(candidate)) {
-    return null;
-  }
-
-  const normalizedCandidate = normalizeConversationPayload(candidate);
-
-  if (containsStructuredMessageField(normalizedCandidate)) {
-    return normalizeStructuredMessage(normalizedCandidate);
-  }
-
-  if (
-    isPlainObject(normalizedCandidate.message) &&
-    containsStructuredMessageField(normalizedCandidate.message)
-  ) {
-    return normalizeStructuredMessage(normalizedCandidate.message);
-  }
-
-  return null;
-}
-
-function normalizeDirectRequestMessage(message) {
-  return normalizeStructuredMessage(message);
-}
-
-function normalizeDirectSinchRequest(payload, { defaultAppId } = {}) {
-  if (!isPlainObject(payload)) {
-    return null;
-  }
-
-  const normalizedPayload = normalizeConversationPayload(payload);
-  if (!isPlainObject(normalizedPayload.recipient)) {
-    return null;
-  }
-
-  const normalizedMessage = normalizeDirectRequestMessage(normalizedPayload.message);
-  if (!normalizedMessage || !containsStructuredMessageField(normalizedMessage)) {
-    return null;
-  }
-
-  const appId = asNonEmptyString(normalizedPayload.app_id) || defaultAppId || null;
-  if (!appId) {
-    return null;
-  }
-
-  return {
-    ...normalizedPayload,
-    app_id: appId,
-    message: normalizedMessage,
-  };
-}
-
-export function extractDirectSinchRequests(payload, { defaultAppId } = {}) {
-  let candidate = payload;
-
-  if (typeof candidate === "string") {
-    const parsed = parseJsonString(candidate);
-    if (!parsed) {
-      return null;
-    }
-
-    candidate = parsed;
-  }
-
-  const directCandidates = Array.isArray(candidate)
-    ? candidate
-    : Array.isArray(candidate?.requests)
-      ? candidate.requests
-      : [candidate];
-
-  if (!Array.isArray(directCandidates) || directCandidates.length === 0) {
-    return null;
-  }
-
-  const requests = directCandidates.map((request) =>
-    normalizeDirectSinchRequest(request, { defaultAppId }),
-  );
-
-  return requests.every(Boolean) ? requests : null;
-}
-
+/**
+ * Normalizes a Genesys outbound payload or a direct Sinch payload into one internal shape.
+ */
 export function parseGenesysOutboundMessage(payload, { defaultSinchAppId } = {}) {
   const directRequests = extractDirectSinchRequests(payload, {
     defaultAppId: defaultSinchAppId,
@@ -512,25 +275,11 @@ export function parseGenesysOutboundMessage(payload, { defaultSinchAppId } = {})
       quickReplies: [],
       carouselCards: [],
       structuredMessage: null,
-      timestamp: new Date().toISOString(),
       directRequests,
+      timestamp: new Date().toISOString(),
       raw: payload,
     };
   }
-
-  const id =
-    asNonEmptyString(payload?.id) ||
-    asNonEmptyString(payload?.channel?.messageId);
-  const customerId =
-    asNonEmptyString(payload?.channel?.to?.id) ||
-    asNonEmptyString(payload?.to?.id) ||
-    asNonEmptyString(payload?.recipient?.id) ||
-    null;
-
-  const agentId =
-    asNonEmptyString(payload?.channel?.from?.id) ||
-    asNonEmptyString(payload?.from?.id) ||
-    null;
 
   const rawText =
     asNonEmptyString(payload?.text) ||
@@ -542,45 +291,53 @@ export function parseGenesysOutboundMessage(payload, { defaultSinchAppId } = {})
           .join("\n") || null
       : null);
 
-  const structuredMessage = extractStructuredMessageCandidate(rawText);
-  const text = structuredMessage ? null : rawText;
-
-  const quickReplies = extractQuickReplies(payload).map(mapQuickReplyChoice);
-  const carouselCards = extractCarouselCards(payload);
-
-  const time =
-    asNonEmptyString(payload?.channel?.time) ||
-    asNonEmptyString(payload?.time) ||
-    new Date().toISOString();
+  const structuredMessage = extractStructuredMessage(rawText);
+  const parsed = {
+    kind: "genesys_outbound",
+    id:
+      asNonEmptyString(payload?.id) ||
+      asNonEmptyString(payload?.channel?.messageId),
+    customerId:
+      asNonEmptyString(payload?.channel?.to?.id) ||
+      asNonEmptyString(payload?.to?.id) ||
+      asNonEmptyString(payload?.recipient?.id) ||
+      null,
+    agentId:
+      asNonEmptyString(payload?.channel?.from?.id) ||
+      asNonEmptyString(payload?.from?.id) ||
+      null,
+    text: structuredMessage ? null : rawText,
+    quickReplies: extractQuickReplies(payload).map(mapQuickReplyChoice),
+    carouselCards: extractCarouselCards(payload),
+    structuredMessage,
+    directRequests: null,
+    timestamp:
+      asNonEmptyString(payload?.channel?.time) ||
+      asNonEmptyString(payload?.time) ||
+      new Date().toISOString(),
+    raw: payload,
+  };
 
   console.log(
     "parseGenesysOutboundMessage : Parsed Genesys outbound message:",
     JSON.stringify({
-      id,
-      customerId,
-      agentId,
-      text,
-      quickReplies,
-      carouselCards,
-      structuredMessage,
-      time,
+      id: parsed.id,
+      customerId: parsed.customerId,
+      agentId: parsed.agentId,
+      text: parsed.text,
+      quickReplies: parsed.quickReplies,
+      carouselCards: parsed.carouselCards,
+      structuredMessage: parsed.structuredMessage,
+      time: parsed.timestamp,
     }),
   );
 
-  return {
-    kind: "genesys_outbound",
-    id,
-    customerId,
-    agentId,
-    text,
-    quickReplies,
-    carouselCards,
-    structuredMessage,
-    timestamp: time,
-    raw: payload,
-  };
+  return parsed;
 }
 
+/**
+ * Builds the common Sinch recipient envelope for a customer phone number.
+ */
 function buildRecipient({ appId, customerId }) {
   return {
     app_id: appId,
@@ -597,6 +354,9 @@ function buildRecipient({ appId, customerId }) {
   };
 }
 
+/**
+ * Translates the normalized outbound message into one or more Sinch API requests.
+ */
 export function buildSinchRequestsFromGenesysMessage({
   appId,
   genesysMessage,
@@ -605,27 +365,31 @@ export function buildSinchRequestsFromGenesysMessage({
     return genesysMessage.directRequests;
   }
 
-  const customerId = genesysMessage.customerId;
-  if (!customerId) {
+  if (!genesysMessage.customerId) {
     throw new Error(
       "Unable to determine end-user RCS identity from Genesys outbound payload.",
     );
   }
 
-  const base = buildRecipient({ appId, customerId });
+  const base = buildRecipient({
+    appId,
+    customerId: genesysMessage.customerId,
+  });
   const correlationBase = genesysMessage.id || `genesys-${Date.now()}`;
-  const requests = [];
 
   if (genesysMessage.structuredMessage) {
-    requests.push({
-      ...base,
-      correlation_id: correlationBase,
-      message: genesysMessage.structuredMessage,
-    });
-    return requests;
+    return [
+      {
+        ...base,
+        correlation_id: correlationBase,
+        message: genesysMessage.structuredMessage,
+      },
+    ];
   }
 
   if (genesysMessage.carouselCards.length > 0) {
+    const requests = [];
+
     if (genesysMessage.text) {
       requests.push({
         ...base,
@@ -658,82 +422,86 @@ export function buildSinchRequestsFromGenesysMessage({
   }
 
   if (genesysMessage.quickReplies.length > 0) {
-    requests.push({
+    return [
+      {
+        ...base,
+        correlation_id: correlationBase,
+        message: {
+          choice_message: {
+            text_message: {
+              text: genesysMessage.text || "Fais le bon choix ! 😉",
+            },
+            choices: genesysMessage.quickReplies.slice(0, 13),
+          },
+        },
+      },
+    ];
+  }
+
+  return [
+    {
       ...base,
       correlation_id: correlationBase,
       message: {
-        choice_message: {
-          text_message: {
-            text: genesysMessage.text || "Fais le bon choix ! 😉",
-          },
-          choices: genesysMessage.quickReplies.slice(0, 13),
+        text_message: {
+          text: genesysMessage.text || "",
         },
       },
-    });
-    return requests;
-  }
-
-  requests.push({
-    ...base,
-    correlation_id: correlationBase,
-    message: {
-      text_message: {
-        text: genesysMessage.text || "",
-      },
     },
-  });
-
-  return requests;
+  ];
 }
 
+/**
+ * Flattens a Sinch callback into the internal inbound message shape used by the middleware.
+ */
 export function parseSinchCallback(payload) {
-  if (payload?.message) {
-    const message = payload.message;
-    const contactMessage = message.contact_message || {};
-
-    let inboundType = "unsupported";
-    let text = null;
-    let mediaUrl = null;
-    let choiceMessageId = null;
-
-    if (contactMessage.text_message?.text) {
-      inboundType = "text";
-      text = contactMessage.text_message.text;
-    } else if (contactMessage.choice_response_message?.postback_data) {
-      inboundType = "quick_reply";
-      text = contactMessage.choice_response_message.postback_data;
-      choiceMessageId =
-        contactMessage.choice_response_message.message_id || null;
-    }
-
+  if (!payload?.message) {
     return {
-      kind: "message_inbound",
-      externalUserId: asNonEmptyString(message.channel_identity?.identity),
-      messageId: asNonEmptyString(message.id),
-      timestamp:
-        asNonEmptyString(message.accept_time) ||
-        asNonEmptyString(payload.event_time) ||
-        new Date().toISOString(),
-      nickname: asNonEmptyString(message.sender_id) || null,
-      text,
-      mediaUrl,
-      inboundType,
-      metadata: {
-        sourceChannel: "RCS",
-        sinchConversationId:
-          asNonEmptyString(message.conversation_id) || undefined,
-        sinchContactId: asNonEmptyString(message.contact_id) || undefined,
-        sinchAppId: asNonEmptyString(payload.app_id) || undefined,
-        sinchMessageMetadata: payload.message_metadata || undefined,
-        sinchCorrelationId: payload.correlation_id || undefined,
-        choiceMessageId: choiceMessageId || undefined,
-      },
+      kind: "unsupported",
       raw: payload,
     };
   }
 
+  const message = payload.message;
+  const contactMessage = message.contact_message || {};
+
+  let inboundType = "unsupported";
+  let text = null;
+  let mediaUrl = null;
+  let choiceMessageId = null;
+
+  if (contactMessage.text_message?.text) {
+    inboundType = "text";
+    text = contactMessage.text_message.text;
+  } else if (contactMessage.choice_response_message?.postback_data) {
+    inboundType = "quick_reply";
+    text = contactMessage.choice_response_message.postback_data;
+    choiceMessageId =
+      contactMessage.choice_response_message.message_id || null;
+  }
+
   return {
-    kind: "unsupported",
+    kind: "message_inbound",
+    externalUserId: asNonEmptyString(message.channel_identity?.identity),
+    messageId: asNonEmptyString(message.id),
+    timestamp:
+      asNonEmptyString(message.accept_time) ||
+      asNonEmptyString(payload.event_time) ||
+      new Date().toISOString(),
+    nickname: asNonEmptyString(message.sender_id) || null,
+    text,
+    mediaUrl,
+    inboundType,
+    metadata: {
+      sourceChannel: "RCS",
+      sinchConversationId:
+        asNonEmptyString(message.conversation_id) || undefined,
+      sinchContactId: asNonEmptyString(message.contact_id) || undefined,
+      sinchAppId: asNonEmptyString(payload.app_id) || undefined,
+      sinchMessageMetadata: payload.message_metadata || undefined,
+      sinchCorrelationId: payload.correlation_id || undefined,
+      choiceMessageId: choiceMessageId || undefined,
+    },
     raw: payload,
   };
 }

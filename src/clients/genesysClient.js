@@ -6,10 +6,16 @@ export class GenesysClient {
   token = null;
   tokenExpiresAt = 0;
 
+  /**
+   * Stores the Genesys configuration used by the HTTP client.
+   */
   constructor(config) {
     this.config = config;
   }
 
+  /**
+   * Sends one inbound open message to Genesys Cloud.
+   */
   async sendInboundMessage(messagePayload) {
     const query = this.config.prefetchConversationId
       ? "?prefetchConversationId=true"
@@ -29,6 +35,9 @@ export class GenesysClient {
     );
   }
 
+  /**
+   * Sends one delivery receipt update to Genesys Cloud.
+   */
   async sendInboundReceipt(receiptPayload) {
     return this.request(
       `/api/v2/conversations/messages/${encodeURIComponent(this.config.integrationId)}/inbound/open/receipt`,
@@ -39,6 +48,9 @@ export class GenesysClient {
     );
   }
 
+  /**
+   * Executes one HTTP request against the Genesys API.
+   */
   async request(path, { method = "GET", body } = {}) {
     console.log(
       "Step 3 : GenesysClient.request - Making API request to Genesys Cloud with path:",
@@ -79,6 +91,9 @@ export class GenesysClient {
     return responseBody;
   }
 
+  /**
+   * Retrieves and caches the OAuth token used to call Genesys Cloud.
+   */
   async getAccessToken() {
     const now = Date.now();
     if (this.token && now < this.tokenExpiresAt) {
@@ -121,6 +136,9 @@ export class GenesysClient {
     return this.token;
   }
 
+  /**
+   * Reads a Genesys API response and returns JSON when possible.
+   */
   async readResponseBody(response) {
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
