@@ -383,7 +383,7 @@ function extractStructuredMessageCandidate(value) {
   return null;
 }
 
-function normalizeDirectRequestMessage(message) {
+function replaceEmbeddedStructuredTextMessage(message) {
   const normalizedMessage = normalizeConversationPayload(message);
   if (!isPlainObject(normalizedMessage)) {
     return null;
@@ -393,11 +393,21 @@ function normalizeDirectRequestMessage(message) {
     normalizedMessage?.text_message?.text,
   );
 
-  if (embeddedStructuredMessage) {
-    return embeddedStructuredMessage;
+  if (!embeddedStructuredMessage) {
+    return normalizedMessage;
   }
 
-  return normalizedMessage;
+  const nextMessage = { ...normalizedMessage };
+  delete nextMessage.text_message;
+
+  return {
+    ...nextMessage,
+    ...embeddedStructuredMessage,
+  };
+}
+
+function normalizeDirectRequestMessage(message) {
+  return replaceEmbeddedStructuredTextMessage(message);
 }
 
 function normalizeDirectSinchRequest(payload, { defaultAppId } = {}) {
