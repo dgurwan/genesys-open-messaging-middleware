@@ -275,6 +275,7 @@ app.post("/webhooks/genesys/outbound", async (req, res) => {
 
   if (
     outbound.kind !== "sinch_direct" &&
+    !outbound.structuredMessage &&
     !outbound.text &&
     outbound.quickReplies.length === 0 &&
     outbound.carouselCards.length === 0
