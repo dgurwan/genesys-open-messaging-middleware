@@ -13,7 +13,7 @@ export function asNonEmptyString(value) {
 }
 
 /**
- * Parses a JSON string and also supports payloads that were stringified more than once.
+ * Parses a JSON string and also supports values that were stringified more than once.
  */
 export function parseJsonString(value, { maxDepth = 3 } = {}) {
   let text = asNonEmptyString(value);
@@ -145,9 +145,9 @@ export function replaceEmbeddedStructuredTextMessage(message) {
 }
 
 /**
- * Normalizes a direct Sinch request and injects app_id when it is missing.
+ * Normalizes one direct Sinch request and injects app_id when it is missing.
  */
-function normalizeDirectSinchRequest(payload, { defaultAppId } = {}) {
+export function normalizeDirectSinchRequest(payload, { defaultAppId } = {}) {
   if (!isPlainObject(payload) || !isPlainObject(payload.recipient)) {
     return null;
   }
@@ -175,36 +175,4 @@ function normalizeDirectSinchRequest(payload, { defaultAppId } = {}) {
     app_id: payload.app_id || appId,
     message,
   };
-}
-
-/**
- * Extracts one or more direct Sinch requests from an object, an array or a JSON string.
- */
-export function extractDirectSinchRequests(payload, { defaultAppId } = {}) {
-  let candidate = payload;
-
-  if (typeof candidate === "string") {
-    const parsed = parseJsonString(candidate);
-    if (!parsed) {
-      return null;
-    }
-
-    candidate = parsed;
-  }
-
-  const directCandidates = Array.isArray(candidate)
-    ? candidate
-    : Array.isArray(candidate?.requests)
-      ? candidate.requests
-      : [candidate];
-
-  if (!Array.isArray(directCandidates) || directCandidates.length === 0) {
-    return null;
-  }
-
-  const requests = directCandidates.map((request) =>
-    normalizeDirectSinchRequest(request, { defaultAppId }),
-  );
-
-  return requests.every(Boolean) ? requests : null;
 }

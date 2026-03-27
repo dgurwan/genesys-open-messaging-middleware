@@ -3,12 +3,18 @@ import { HttpIntegrationError } from "../errors.js";
 import {
   asNonEmptyString,
   isPlainObject,
+  normalizeDirectSinchRequest,
   parseJsonString,
   replaceEmbeddedStructuredTextMessage,
 } from "../utils/sinchPayload.js";
 
 /**
- * Normalizes the payload just before the HTTP call without changing valid text_message payloads.
+ * Normalizes the payload just before the HTTP call.
+ *
+ * Supported cases:
+ * - a regular Sinch envelope already containing message.text_message
+ * - a Sinch envelope whose message.text_message.text contains JSON with cardMessage
+ * - a JSON string containing one full Sinch envelope
  */
 function normalizeOutgoingPayload(payload, { defaultAppId } = {}) {
   let candidate = payload;
@@ -20,6 +26,13 @@ function normalizeOutgoingPayload(payload, { defaultAppId } = {}) {
     }
 
     candidate = parsed;
+  }
+
+  const directRequest = normalizeDirectSinchRequest(candidate, {
+    defaultAppId,
+  });
+  if (directRequest) {
+    return directRequest;
   }
 
   if (!isPlainObject(candidate)) {
@@ -52,7 +65,7 @@ export class SinchClient {
   }
 
   /**
-   * Sends one message to the Sinch Conversation API after a final payload normalization step.
+   * Sends one message to the Sinch Conversation API after the final payload normalization step.
    */
   async sendMessage(messagePayload) {
     const normalizedPayload = normalizeOutgoingPayload(messagePayload, {

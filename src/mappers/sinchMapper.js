@@ -1,7 +1,7 @@
 import {
   asNonEmptyString,
-  extractDirectSinchRequests,
   extractStructuredMessage,
+  normalizeDirectSinchRequest,
 } from "../utils/sinchPayload.js";
 
 /**
@@ -29,7 +29,7 @@ function isAbsoluteUrl(value) {
 }
 
 /**
- * Reuses the URL validation helper to express the intent more clearly.
+ * Reuses the URL validation helper to make the intent explicit.
  */
 function looksLikeUrl(value) {
   return isAbsoluteUrl(value);
@@ -245,43 +245,10 @@ function extractCarouselCards(payload) {
 }
 
 /**
- * Normalizes a Genesys outbound payload or a direct Sinch payload into one internal shape.
+ * Extracts the plain text portion of a Genesys outbound payload.
  */
-export function parseGenesysOutboundMessage(payload, { defaultSinchAppId } = {}) {
-  const directRequests = extractDirectSinchRequests(payload, {
-    defaultAppId: defaultSinchAppId,
-  });
-
-  if (directRequests) {
-    const directCorrelationId =
-      directRequests
-        .map((request) => asNonEmptyString(request?.correlation_id))
-        .find(Boolean) || null;
-
-    console.log(
-      "parseGenesysOutboundMessage : Detected direct Sinch request payload:",
-      JSON.stringify({
-        correlationId: directCorrelationId,
-        requestCount: directRequests.length,
-      }),
-    );
-
-    return {
-      kind: "sinch_direct",
-      id: directCorrelationId,
-      customerId: null,
-      agentId: null,
-      text: null,
-      quickReplies: [],
-      carouselCards: [],
-      structuredMessage: null,
-      directRequests,
-      timestamp: new Date().toISOString(),
-      raw: payload,
-    };
-  }
-
-  const rawText =
+function extractGenesysText(payload) {
+  return (
     asNonEmptyString(payload?.text) ||
     asNonEmptyString(payload?.message) ||
     (Array.isArray(payload?.content)
@@ -289,10 +256,18 @@ export function parseGenesysOutboundMessage(payload, { defaultSinchAppId } = {})
           .map((item) => asNonEmptyString(item?.text))
           .filter(Boolean)
           .join("\n") || null
-      : null);
+      : null)
+  );
+}
 
+/**
+ * Builds the normalized internal object used by the middleware for one Genesys outbound payload.
+ */
+function buildGenesysOutboundMessage(payload) {
+  const rawText = extractGenesysText(payload);
   const structuredMessage = extractStructuredMessage(rawText);
-  const parsed = {
+
+  return {
     kind: "genesys_outbound",
     id:
       asNonEmptyString(payload?.id) ||
@@ -310,13 +285,50 @@ export function parseGenesysOutboundMessage(payload, { defaultSinchAppId } = {})
     quickReplies: extractQuickReplies(payload).map(mapQuickReplyChoice),
     carouselCards: extractCarouselCards(payload),
     structuredMessage,
-    directRequests: null,
+    directRequest: null,
     timestamp:
       asNonEmptyString(payload?.channel?.time) ||
       asNonEmptyString(payload?.time) ||
       new Date().toISOString(),
     raw: payload,
   };
+}
+
+/**
+ * Normalizes either a direct Sinch request or a Genesys outbound webhook into one internal shape.
+ */
+export function parseGenesysOutboundMessage(payload, { defaultSinchAppId } = {}) {
+  const directRequest = normalizeDirectSinchRequest(payload, {
+    defaultAppId: defaultSinchAppId,
+  });
+
+  if (directRequest) {
+    const parsed = {
+      kind: "sinch_direct",
+      id: asNonEmptyString(directRequest?.correlation_id),
+      customerId: null,
+      agentId: null,
+      text: null,
+      quickReplies: [],
+      carouselCards: [],
+      structuredMessage: null,
+      directRequest,
+      timestamp: new Date().toISOString(),
+      raw: payload,
+    };
+
+    console.log(
+      "parseGenesysOutboundMessage : Detected direct Sinch request payload:",
+      JSON.stringify({
+        correlationId: parsed.id,
+        message: parsed.directRequest.message,
+      }),
+    );
+
+    return parsed;
+  }
+
+  const parsed = buildGenesysOutboundMessage(payload);
 
   console.log(
     "parseGenesysOutboundMessage : Parsed Genesys outbound message:",
@@ -362,7 +374,7 @@ export function buildSinchRequestsFromGenesysMessage({
   genesysMessage,
 }) {
   if (genesysMessage.kind === "sinch_direct") {
-    return genesysMessage.directRequests;
+    return [genesysMessage.directRequest];
   }
 
   if (!genesysMessage.customerId) {

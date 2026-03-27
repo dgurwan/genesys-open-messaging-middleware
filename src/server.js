@@ -133,7 +133,7 @@ function hasOutboundContent(outbound) {
   return Boolean(
     outbound?.text ||
       outbound?.structuredMessage ||
-      (Array.isArray(outbound?.directRequests) && outbound.directRequests.length > 0) ||
+      outbound?.directRequest ||
       outbound?.quickReplies?.length ||
       outbound?.carouselCards?.length,
   );
