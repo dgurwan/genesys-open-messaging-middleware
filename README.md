@@ -15,17 +15,12 @@ Bridge Node.js complet pour ce flux :
 - `POST /api/messages` pour injecter un message test ou custom vers Genesys
 - `POST /webhooks/sinch` pour recevoir les callbacks Sinch
 - `POST /webhooks/genesys/outbound` pour recevoir les réponses agent Genesys
-- `GET /api/conversations` pour voir les conversations en mémoire
-- `GET /api/conversations/:externalUserId/messages` pour relire l'historique
-- `GET /api/conversations/:externalUserId/events` en SSE pour suivre les événements
 - OAuth2 **Client Credentials** vers Genesys Cloud
 - OAuth2 **Client Credentials** vers Sinch
 - validation webhook **Genesys** avec `X-Hub-Signature-256`
 - validation webhook **Sinch** avec `x-sinch-webhook-signature`
 - déduplication simple des retries webhook
 - mapping des receipts **Sinch -> Genesys**
-
-## Ce que cette version mappe déjà
 
 ### Sinch RCS -> Genesys
 
@@ -47,7 +42,7 @@ Bridge Node.js complet pour ce flux :
 - stockage **en mémoire** uniquement
 - pas de base SQL / Redis
 - les quick replies RCS inbound sont relayées en texte + metadata côté Genesys
-- le format exact des templates riches Genesys peut varier selon le payload normalisé reçu par ton org ; le mapper gère les formes les plus fréquentes, mais peut nécessiter un ajustement léger après capture de vrais payloads
+- le format exact des templates riches Genesys peut varier selon le payload normalisé reçu par ton org
 - si Genesys rejette un inbound média avec `content[].attachment`, le middleware retombe automatiquement en **texte + URL média**
 
 ## Pré-requis Genesys Cloud
@@ -168,26 +163,3 @@ Le middleware attend un message normalisé Genesys signé. Il :
     ├── signatures.js
     └── validation.js
 ```
-
-## Docker
-
-Build :
-
-```bash
-docker build -t genesys-sinch-rcs-middleware .
-```
-
-Run :
-
-```bash
-docker run --rm -p 3000:3000 --env-file .env genesys-sinch-rcs-middleware
-```
-
-## Mise en production recommandée
-
-Pour un usage réel, remplace rapidement le stockage mémoire par :
-
-- **Redis** pour la déduplication webhook
-- **PostgreSQL** pour la corrélation conversation/message
-- une file d'attente pour absorber les retries
-- des logs structurés centralisés
